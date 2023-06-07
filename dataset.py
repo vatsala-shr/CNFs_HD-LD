@@ -8,9 +8,11 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Subset
 from time import sleep
 import torchvision
+import numpy as np
     
 class CT:
-    def __init__(self, path = 'data/', transform = None, train = True, num_hd = 200, num_crap = 0, si_ld = False):
+    def __init__(self, path = 'data/', transform = None, train = True, num_hd = 200, num_crap = 0, si_ld = False, 
+                 sigma = 0.5, noise = True):
         random.seed(1)
         self.train = train
         self.transform = transform
@@ -19,6 +21,8 @@ class CT:
         self.list_ld_pair = random.sample(range(200), 200 - num_hd)
         self.t = transforms.ToTensor()
         self.si_ld = si_ld
+        self.sigma = sigma
+        self.noise = noise
     
     def __len__(self):
         if self.train:
@@ -39,10 +43,17 @@ class CT:
         pet_ld = cv2.imread(self.path + f'pet/ld/{start}.png')[:, :, 0]
         pet_ld_out = cv2.imread(self.path + f'pet/ld_out/{start}.png')[:, :, 0]
         mask = cv2.imread(self.path + f'ct/mask/{start}.png')[:, :, 0]
-
+        
         if start in self.list_crap:
-            ct_ld = cv2.imread(self.path + f'ct/ld_out/{start}.png')[:, :, 0]
-            pet_ld = cv2.imread(self.path + f'pet/ld_out/{start}.png')[:, :, 0]
+            # For added noise low dose
+            if self.noise:
+                noise = np.random.normal(loc = 0, scale = self.sigma, size = ct_ld.shape).astype(np.uint8)
+                ct_ld = cv2.add(ct_ld, noise)
+                pet_ld = cv2.add(pet_ld, noise)
+            else:
+                # For out of distribution low dose
+                ct_ld = cv2.imread(self.path + f'ct/ld_out/{start}.png')[:, :, 0]
+                pet_ld = cv2.imread(self.path + f'pet/ld_out/{start}.png')[:, :, 0]
 
         if start in self.list_ld_pair:
             if self.si_ld:
@@ -72,8 +83,10 @@ class CT:
 # transform = transforms.Compose([transforms.RandomHorizontalFlip(),
 #                                     transforms.RandomVerticalFlip()])
     
-# train_set = CT(num_hd = int(0 * 200),
-#                         si_ld = False)
+# train_set = CT(num_hd = int(1 * 200),
+#                transform=transform,
+#                num_crap=200,
+#                sigma = 0.5)
 # test_set = CT(transform = transform,
 #                     train = False)
 
