@@ -1,5 +1,5 @@
 import subprocess
-shape = [0.5, 1.0]
+shape = [1.0, 1.5, 2]
 noise_iter = [1, 2, 4, 8, 16]
 for j in range(len(noise_iter)):
     for i in range(len(shape)):

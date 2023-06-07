@@ -163,9 +163,9 @@ class _Glow(nn.Module):
         if self.next is not None:
             x = squeeze(x)
             x_cond = squeeze(x_cond)
-            x, x_split = x.chunk(2, dim=1)
+            # x, x_split = x.chunk(2, dim=1)
             x, sldj = self.next(x, x_cond, sldj, reverse)
-            x = torch.cat((x, x_split), dim=1)
+            # x = torch.cat((x, x_split), dim=1)
             x = squeeze(x, reverse=True)
             x_cond = squeeze(x_cond, reverse=True)
 

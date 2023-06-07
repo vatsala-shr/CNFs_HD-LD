@@ -39,12 +39,14 @@ def main(args):
 
     transform = transforms.Compose([transforms.RandomHorizontalFlip(),
                                     transforms.RandomVerticalFlip()])
-    print(f'Supervision Ratio : {args.sup_ratio}\nCrap Ratio : {args.crap_ratio}\nShape Parameter : {args.shape}')
+    print(f'Supervision Ratio : {args.sup_ratio}\nCrap Ratio : {args.crap_ratio}\nShape Parameter : {args.shape}\nNoise : {args.noise}\nNoise Iteration : {args.noise_iter}')
     
     train_set = CT(transform = transform,
                           num_hd = int(args.sup_ratio * 200),
                           num_crap = int(args.crap_ratio * 200),
-                          si_ld=args.si_ld)
+                          si_ld=args.si_ld,
+                          noise=args.noise,
+                          noise_iter=args.noise_iter)
     test_set = CT(train = False)
     trainloader = data.DataLoader(train_set, batch_size=4, shuffle=True, num_workers=args.num_workers)
     testloader = data.DataLoader(test_set, batch_size=4, shuffle=False, num_workers=args.num_workers)
@@ -63,20 +65,24 @@ def main(args):
         net = torch.nn.DataParallel(net, args.gpu_ids)
         cudnn.benchmark = args.benchmark
 
-    start_epoch = 0
-    labels = [0.0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0]
+    # # Different paths for different experiments
     # path = f'ckpts/shape/{args.type}/{args.shape}/{args.sup_ratio}_best.pth.tar'
-    path = f'ckpts/robust/{args.type}/out_dist/{args.crap_ratio}/{args.shape}_best.pth.tar'
+    # path = f'ckpts/robust/{args.type}/out_dist/{args.crap_ratio}/{args.shape}_best.pth.tar'
+    path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
     # path = f'ckpts/si_ld/{args.type}/{args.sup_ratio}_best.pth.tar'
-    if args.resume:
+
+    start_epoch = 0
+    if args.resume and os.path.exists(path):
         # Load checkpoint.
         print(path)
         checkpoint = torch.load(path, map_location = device)
         net.load_state_dict(checkpoint['net'])
         global best_ssim
         global global_step
+        global best_epoch
         best_ssim = checkpoint['ssim']
         start_epoch = checkpoint['epoch']
+        best_epoch = start_epoch
         print(f'Best SSIM : {best_ssim}, Start Epoch : {start_epoch}')
         global_step = start_epoch * len(train_set)
 
@@ -96,8 +102,11 @@ def main(args):
             optimizer = optim.Adam(net.parameters(), lr=args.lr)
             scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
             print('Loaded previous model...')
-        
-
+        print(f'Current Epoch - Best Epoch : {(epoch - best_epoch)}')
+        if (epoch - best_epoch) >= 50:
+            print('Early Stopping...')
+            print(f"Best SSIM : {best_ssim}")
+            break
 
     # net.eval()
     # evaluate_1c(net, testloader, device, args.type)
@@ -166,6 +175,7 @@ def test(epoch, net, testloader, device, args, path):
         best_epoch = epoch
 
     return False
+    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Glow on CIFAR-10')
@@ -188,14 +198,16 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=0, help='Random seed for reproducibility')
     parser.add_argument('--warm_up', default=500000, type=int, help='Number of steps for lr warm-up')
     parser.add_argument('--mode', default="sketch", choices=['gray', 'sketch'])
-    parser.add_argument('--sup_ratio', default = 0, type = float)
+    parser.add_argument('--sup_ratio', default = 0.0, type = float)
     parser.add_argument('--type', type = str, default = 'ct')
     parser.add_argument('--inp_channel', type=int, default=1)
     parser.add_argument('--cond_channel', type=int, default=1)
     parser.add_argument('--cc', type = str2bool, default = False)
-    parser.add_argument('--shape', type = float, default=0.5)
-    parser.add_argument('--crap_ratio', type = float, default=0)
+    parser.add_argument('--shape', type = float, default=2)
+    parser.add_argument('--crap_ratio', type = float, default=0.0)
     parser.add_argument('--si_ld', type = bool, default = False)
+    parser.add_argument('--noise_iter', default=1, type=int)
+    parser.add_argument('--noise', default=True, type=bool)
     best_loss = float('inf')
     best_ssim = 0
     global_step = 0
