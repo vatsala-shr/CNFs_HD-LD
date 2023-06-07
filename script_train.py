@@ -96,6 +96,8 @@ def main(args):
             optimizer = optim.Adam(net.parameters(), lr=args.lr)
             scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
             print('Loaded previous model...')
+        
+
 
     # net.eval()
     # evaluate_1c(net, testloader, device, args.type)
@@ -137,6 +139,7 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
 @torch.no_grad()
 def test(epoch, net, testloader, device, args, path):
     global best_ssim
+    global best_epoch
     net.eval()
 
     rrmse_val, psnr_val, ssim_val = evaluate_1c(net, testloader, device, args.type)
@@ -160,9 +163,9 @@ def test(epoch, net, testloader, device, args, path):
         os.makedirs(path1, exist_ok=True)
         torch.save(state, path)        
         best_ssim = ssim
-    
+        best_epoch = epoch
+
     return False
-    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Glow on CIFAR-10')
