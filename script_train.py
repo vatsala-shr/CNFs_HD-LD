@@ -122,13 +122,14 @@ def main(args):
                 best_epoch = start_epoch
                 epoch = start_epoch
                 print('Initialized new model!')
-            optimizer = optim.Adam(net.parameters(), lr=args.lr)
+            lr = args.lr / 10
+            optimizer = optim.Adam(net.parameters(), lr=lr)
             scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
         else:
             epoch += 1
 
         # Early Stopping
-        print(f'Current Epoch - Best Epoch : {(epoch - best_epoch)}')
+        print(f'Current Epoch - Best Epoch : {(epoch - best_epoch)}, Epochs Completed / Total Epochs : {c}/{args.num_epochs}')
         if (epoch - best_epoch) >= 50:
             print('Early Stopping...')
             print(f"Best SSIM : {best_ssim}")
