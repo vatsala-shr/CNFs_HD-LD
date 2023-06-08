@@ -100,6 +100,7 @@ def main(args):
                 checkpoint = torch.load(path, map_location = device)
                 net.load_state_dict(checkpoint['net'])
                 best_ssim = checkpoint['ssim']
+                best_epoch = checkpoint['epoch']
                 print('Loaded previous model...')
             else:
                 net = Glow(num_channels=args.num_channels,
@@ -114,6 +115,7 @@ def main(args):
                     net = torch.nn.DataParallel(net, args.gpu_ids)
                     cudnn.benchmark = args.benchmark
                 best_ssim = 0
+                best_epoch = epoch
                 print('Initialized new model!')
             optimizer = optim.Adam(net.parameters(), lr=args.lr)
             scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
