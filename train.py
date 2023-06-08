@@ -95,13 +95,32 @@ def main(args):
     for epoch in range(start_epoch, start_epoch + args.num_epochs):
         train(epoch, net, trainloader, device, optimizer, scheduler,
               loss_fn, type = args.type)
-        if test(epoch, net, testloader, device, args, path):  
-            checkpoint = torch.load(path, map_location = device)
-            net.load_state_dict(checkpoint['net'])
-            best_ssim = checkpoint['ssim']
+        if test(epoch, net, testloader, device, args, path):
+            if os.path.exists(path):  
+                checkpoint = torch.load(path, map_location = device)
+                net.load_state_dict(checkpoint['net'])
+                best_ssim = checkpoint['ssim']
+                best_epoch = checkpoint['epoch']
+                print('Loaded previous model...')
+            else:
+                net = Glow(num_channels=args.num_channels,
+                            num_levels=args.num_levels,
+                            num_steps=args.num_steps,
+                            mode=args.mode,
+                            inp_channel=args.inp_channel,
+                            cond_channel=args.cond_channel,
+                            cc = args.cc)
+                net = net.to(device)
+                if device == 'cuda':
+                    net = torch.nn.DataParallel(net, args.gpu_ids)
+                    cudnn.benchmark = args.benchmark
+                best_ssim = 0
+                best_epoch = epoch
+                print('Initialized new model!')
             optimizer = optim.Adam(net.parameters(), lr=args.lr)
             scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
-            print('Loaded previous model...')
+
+        # Early Stopping
         print(f'Current Epoch - Best Epoch : {(epoch - best_epoch)}')
         if (epoch - best_epoch) >= 50:
             print('Early Stopping...')
@@ -210,6 +229,7 @@ if __name__ == '__main__':
     parser.add_argument('--noise', default=True, type=bool)
     best_loss = float('inf')
     best_ssim = 0
+    best_epoch = 0
     global_step = 0
 
     main(parser.parse_args())
