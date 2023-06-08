@@ -93,7 +93,9 @@ def main(args):
     print(f'Number of parameters : {count_parameters(net)}')
 
     epoch = start_epoch
+    c = 0
     while epoch <= args.num_epochs + start_epoch:
+        c += 1
         train(epoch, net, trainloader, device, optimizer, scheduler,
               loss_fn, type = args.type)
         if test(epoch, net, testloader, device, args, path):
@@ -131,7 +133,11 @@ def main(args):
             print('Early Stopping...')
             print(f"Best SSIM : {best_ssim}")
             break
-            
+
+        if c == args.num_epochs:
+            print('Sufficient Epoch Completed!')
+            print(f'Best SSIM : {best_ssim}')
+            break
 
     # net.eval()
     # evaluate_1c(net, testloader, device, args.type)
@@ -216,7 +222,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_channels', '-C', default=128, type=int, help='Number of channels in hidden layers')
     parser.add_argument('--num_levels', '-L', default=4, type=int, help='Number of levels in the Glow model')
     parser.add_argument('--num_steps', '-K', default=8, type=int, help='Number of steps of flow in each level')
-    parser.add_argument('--num_epochs', default=300, type=int, help='Number of epochs to train')
+    parser.add_argument('--num_epochs', default=200, type=int, help='Number of epochs to train')
     parser.add_argument('--num_samples', default=64, type=int, help='Number of samples at test time')
     parser.add_argument('--num_workers', default=8, type=int, help='Number of data loader threads')
     parser.add_argument('--resume', type=str2bool, default=True, help='Resume from checkpoint')
