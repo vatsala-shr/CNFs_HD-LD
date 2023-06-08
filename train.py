@@ -94,7 +94,7 @@ def main(args):
 
     epoch = start_epoch
     c = 0
-    while epoch <= args.num_epochs + start_epoch:
+    while epoch <= args.num_epochs:
         c += 1
         train(epoch, net, trainloader, device, optimizer, scheduler,
               loss_fn, type = args.type)
