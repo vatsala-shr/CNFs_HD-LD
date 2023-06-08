@@ -92,7 +92,9 @@ def main(args):
     scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
     print(f'Number of parameters : {count_parameters(net)}')
 
-    for epoch in range(start_epoch, start_epoch + args.num_epochs):
+    epoch = start_epoch
+    while epoch <= args.num_epochs + start_epoch:
+        epoch += 1
         train(epoch, net, trainloader, device, optimizer, scheduler,
               loss_fn, type = args.type)
         if test(epoch, net, testloader, device, args, path):
@@ -101,6 +103,7 @@ def main(args):
                 net.load_state_dict(checkpoint['net'])
                 best_ssim = checkpoint['ssim']
                 best_epoch = checkpoint['epoch']
+                epoch = best_epoch
                 print('Loaded previous model...')
             else:
                 net = Glow(num_channels=args.num_channels,
@@ -115,7 +118,8 @@ def main(args):
                     net = torch.nn.DataParallel(net, args.gpu_ids)
                     cudnn.benchmark = args.benchmark
                 best_ssim = 0
-                best_epoch = epoch
+                best_epoch = start_epoch
+                epoch = start_epoch
                 print('Initialized new model!')
             optimizer = optim.Adam(net.parameters(), lr=args.lr)
             scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
@@ -126,6 +130,7 @@ def main(args):
             print('Early Stopping...')
             print(f"Best SSIM : {best_ssim}")
             break
+            
 
     # net.eval()
     # evaluate_1c(net, testloader, device, args.type)
