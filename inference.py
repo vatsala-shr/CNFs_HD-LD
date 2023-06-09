@@ -26,15 +26,21 @@ def main(args):
     # Load the dataset
     transform = transforms.Compose([transforms.RandomHorizontalFlip(),
                                     transforms.RandomVerticalFlip()])
-    print(args.sup_ratio)
     train_set = CT(transform = transform,
-                          num_hd = int(args.sup_ratio * 200))
+                          num_hd = int(args.sup_ratio * 200),
+                          num_crap = int(args.crap_ratio * 200),
+                          si_ld=args.si_ld,
+                          noise=args.noise,
+                          noise_iter=args.noise_iter)
     test_set = CT(train = False)
     trainloader = data.DataLoader(train_set, batch_size=2, shuffle=True, num_workers=args.num_workers)
     testloader = data.DataLoader(test_set, batch_size=2, shuffle=False, num_workers=args.num_workers)
 
+    print(f'Supervision Ratio : {args.sup_ratio}\nCrap Ratio : {args.crap_ratio}\nShape Parameter : {args.shape}\nNoise : {args.noise}\nNoise Iteration : {args.noise_iter}')
+
+
     # Initialize the model
-    print('Building model..')
+    # print('Building model..')
     net = Glow(num_channels=args.num_channels,
                num_levels=args.num_levels,
                num_steps=args.num_steps,
@@ -43,21 +49,22 @@ def main(args):
                cond_channel=args.cond_channel,
                cc = args.cc)
     net = net.to(device)
-    # # Loading the correct weights
-    # checkpoint = torch.load(f'ckpts/resnet/ct/{args.sup_ratio}_best.pth.tar', 
-    #                         map_location = device)
-    # net.load_state_dict(checkpoint['net'])
+
+    # Loading the correct weights
+    path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
+    checkpoint = torch.load(path, 
+                            map_location = device)
+    net.load_state_dict(checkpoint['net'])
     # print('Correct weights loaded!')
 
-    # rrmse = checkpoint['rrmse']
-    # psnr = checkpoint['psnr']
-    # ssim = checkpoint['ssim']
-    # print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
-    # print('Correct weights loaded!')
+    rrmse = checkpoint['rrmse']
+    psnr = checkpoint['psnr']
+    ssim = checkpoint['ssim']
+    print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
 
-    # # Finding standard deviation across samples generated under certain sup_ratio
-    sup_ratio = [0.0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0]
-    shape = [0.75, 1.0, 1.5, 2.0]
+    # # # Finding standard deviation across samples generated under certain sup_ratio
+    # sup_ratio = [0.0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0]
+    # shape = [0.75, 1.0, 1.5, 2.0]
 
     # # Finding the standard deviation
     # for i in sup_ratio:
@@ -69,46 +76,46 @@ def main(args):
     #     result(net, testloader, device, i, args.type)
 
 
-    # Checking the metrics related to different experiments
-    rrmse_val = list()
-    psnr_val = list()
-    ssim_val = list()
-    for i in shape:
-        print(i)
-        # Loading the correct weights
-        checkpoint = torch.load(f'ckpts/shape/{args.type}/{i}/0_best.pth.tar', 
-                                map_location = device)
-        print('Building model..')
-        net = Glow(num_channels=args.num_channels,
-               num_levels=args.num_levels,
-               num_steps=args.num_steps,
-               mode=args.mode,
-               inp_channel=args.inp_channel,
-               cond_channel=args.cond_channel,
-               cc = args.cc)
-        net = net.to(device)
-        net.load_state_dict(checkpoint['net'])
-        rrmse = checkpoint['rrmse']
-        psnr = checkpoint['psnr']
-        ssim = checkpoint['ssim']
-        print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
-        print('Correct weights loaded!')
+    # # Checking the metrics related to different experiments
+    # rrmse_val = list()
+    # psnr_val = list()
+    # ssim_val = list()
+    # for i in shape:
+    #     print(i)
+    #     # Loading the correct weights
+    #     checkpoint = torch.load(f'ckpts/shape/{args.type}/{i}/0_best.pth.tar', 
+    #                             map_location = device)
+    #     print('Building model..')
+    #     net = Glow(num_channels=args.num_channels,
+    #            num_levels=args.num_levels,
+    #            num_steps=args.num_steps,
+    #            mode=args.mode,
+    #            inp_channel=args.inp_channel,
+    #            cond_channel=args.cond_channel,
+    #            cc = args.cc)
+    #     net = net.to(device)
+    #     net.load_state_dict(checkpoint['net'])
+    #     rrmse = checkpoint['rrmse']
+    #     psnr = checkpoint['psnr']
+    #     ssim = checkpoint['ssim']
+    #     print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
+    #     print('Correct weights loaded!')
 
 
-        # Evaluate the model
-        net.eval()
-        rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type + '_out')
-        rrmse_val.append(rrmse)
-        psnr_val.append(psnr)
-        ssim_val.append(ssim)
+    #     # Evaluate the model
+    #     net.eval()
+    #     rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type + '_out')
+    #     rrmse_val.append(rrmse)
+    #     psnr_val.append(psnr)
+    #     ssim_val.append(ssim)
 
-    type = args.type
-    rrmse_val, psnr_val, ssim_val = np.array(rrmse_val), np.array(psnr_val), np.array(ssim_val)
-    p = f'experiments/shape/out_dist/'
-    os.makedirs(p, exist_ok=True)
-    create_boxplot(shape, rrmse_val, f'RRMSE', p + 'rrmse')
-    create_boxplot(shape, psnr_val, f'PSNR', p + 'psnr')
-    create_boxplot(shape, ssim_val, f'SSIM', p + 'ssim')
+    # type = args.type
+    # rrmse_val, psnr_val, ssim_val = np.array(rrmse_val), np.array(psnr_val), np.array(ssim_val)
+    # p = f'experiments/shape/out_dist/'
+    # os.makedirs(p, exist_ok=True)
+    # create_boxplot(shape, rrmse_val, f'RRMSE', p + 'rrmse')
+    # create_boxplot(shape, psnr_val, f'PSNR', p + 'psnr')
+    # create_boxplot(shape, ssim_val, f'SSIM', p + 'ssim')
 
 
 @torch.no_grad()
@@ -264,4 +271,8 @@ if __name__ == '__main__':
     parser.add_argument('--cond_channel', type=int, default=1)
     parser.add_argument('--shape', type=float, default=1)
     parser.add_argument('--mode', default="sketch", choices=['gray', 'sketch'])
+    parser.add_argument('--noise_iter', default=1, type=int)
+    parser.add_argument('--crap_ratio', default=0.1, type=float)
+    parser.add_argument('--noise', default=True, type=bool)
+    parser.add_argument('--si_ld', type=bool, default=False)
     main(parser.parse_args())

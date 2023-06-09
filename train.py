@@ -122,8 +122,8 @@ def main(args):
                 best_epoch = start_epoch
                 epoch = start_epoch
                 print('Initialized new model!')
-            lr = args.lr / 10
-            optimizer = optim.Adam(net.parameters(), lr=lr)
+
+            optimizer = optim.Adam(net.parameters(), lr=args.lr)
             scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
         else:
             epoch += 1
