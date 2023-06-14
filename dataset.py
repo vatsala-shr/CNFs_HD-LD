@@ -88,7 +88,7 @@ class CT:
 #                transform=transform,
 #                num_crap=200,
 #                noise = True,
-#                noise_iter = 8)
+#                noise_iter = 0)
 # test_set = CT(transform = transform,
 #                     train = False)
 

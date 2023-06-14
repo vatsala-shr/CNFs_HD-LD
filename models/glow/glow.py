@@ -31,12 +31,12 @@ class Glow(nn.Module):
         x = squeeze(x)
         x_cond = squeeze(x_cond)
         if not reverse:
-            # Variational Dequantization
-            x, sldj = self.dequantize(x, sldj)
-            x, sldj = self.to_logits(x, sldj)
+            # # Variational Dequantization
+            # x, sldj = self.dequantize(x, sldj)
+            # x, sldj = self.to_logits(x, sldj)
 
-            # # Uniform Dequantization
-            # x, sldj = self._pre_process(x)
+            # Uniform Dequantization
+            x, sldj = self._pre_process(x)
         x, sldj = self.flows(x, x_cond, sldj, reverse)
         x = squeeze(x, reverse=True)
 

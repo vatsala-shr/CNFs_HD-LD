@@ -30,7 +30,6 @@ import pickle
 def main(args):
     # Set up main device and scale batch size
     device = torch.device(f'cuda:{args.gpu_id}')
-
     # Set random seeds
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -68,26 +67,29 @@ def main(args):
     # # Different paths for different experiments
     # path = f'ckpts/shape/{args.type}/{args.shape}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/out_dist/{args.crap_ratio}/{args.shape}_best.pth.tar'
-    path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
-    # path = f'ckpts/si_ld/{args.type}/{args.sup_ratio}_best.pth.tar'
-
+    # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
+    path = f'ckpts/resnet/{args.type}/{args.sup_ratio}_best.pth.tar'
+   
     start_epoch = 0
+    global best_ssim
+    global global_step
+    global best_epoch
     if args.resume and os.path.exists(path):
         # Load checkpoint.
         print(path)
         checkpoint = torch.load(path, map_location = device)
         net.load_state_dict(checkpoint['net'])
-        global best_ssim
-        global global_step
-        global best_epoch
         best_ssim = checkpoint['ssim']
         start_epoch = checkpoint['epoch']
         best_epoch = start_epoch
         print(f'Best SSIM : {best_ssim}, Start Epoch : {start_epoch}')
         global_step = start_epoch * len(train_set)
+    else:
+         best_epoch = 0
+         best_ssim = 0
 
-    # loss_fn = util.NLLLoss().to(device)
-    loss_fn = util.NLLLoss(shape = args.shape, device = device).to(device)
+    loss_fn = util.NLLLoss().to(device)
+    # loss_fn = util.NLLLoss(shape = args.shape, device = device).to(device)
     optimizer = optim.Adam(net.parameters(), lr=args.lr)
     scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
     print(f'Number of parameters : {count_parameters(net)}')
@@ -219,11 +221,11 @@ if __name__ == '__main__':
     parser.add_argument('--benchmark', type=str2bool, default=True, help='Turn on CUDNN benchmarking')
     parser.add_argument('--gpu_id', default=1, type=int, help='ID of GPUs to use')
     parser.add_argument('--lr', default=1e-3, type=float, help='Learning rate')
-    parser.add_argument('--max_grad _norm', type=float, default=-1., help='Max gradient norm for clipping')
+    parser.add_argument('--max_grad _norm', type=float, default=-5., help='Max gradient norm for clipping')
     parser.add_argument('--num_channels', '-C', default=128, type=int, help='Number of channels in hidden layers')
     parser.add_argument('--num_levels', '-L', default=4, type=int, help='Number of levels in the Glow model')
     parser.add_argument('--num_steps', '-K', default=8, type=int, help='Number of steps of flow in each level')
-    parser.add_argument('--num_epochs', default=200, type=int, help='Number of epochs to train')
+    parser.add_argument('--num_epochs', default=300, type=int, help='Number of epochs to train')
     parser.add_argument('--num_samples', default=64, type=int, help='Number of samples at test time')
     parser.add_argument('--num_workers', default=8, type=int, help='Number of data loader threads')
     parser.add_argument('--resume', type=str2bool, default=True, help='Resume from checkpoint')
@@ -239,7 +241,7 @@ if __name__ == '__main__':
     parser.add_argument('--crap_ratio', type = float, default=0.0)
     parser.add_argument('--si_ld', type = bool, default = False)
     parser.add_argument('--noise_iter', default=1, type=int)
-    parser.add_argument('--noise', default=True, type=bool)
+    parser.add_argument('--noise', default = False, type=bool)
     best_loss = float('inf')
     best_ssim = 0
     best_epoch = 0

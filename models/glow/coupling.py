@@ -243,18 +243,20 @@ class NN(nn.Module):
         nn.init.zeros_(self.out_conv.weight)
         nn.init.zeros_(self.out_conv.bias)
 
+        self.elu = nn.ELU()
+
     def forward(self, x, x_cond):
         x = self.in_norm(x)
         x = self.in_conv(x) + self.in_condconv(x_cond)
-        x = F.relu(x)
+        x = self.elu(x)
 
         x = self.mid_conv1(x) + self.mid_condconv1(x_cond)
         x = self.mid_norm(x)
-        x = F.relu(x)
+        x = self.elu(x)
 
         x = self.mid_conv2(x) + self.mid_condconv2(x_cond)
         x = self.out_norm(x)
-        x = F.relu(x)
+        x = self.elu(x)
 
         x = self.out_conv(x)
 

@@ -9,6 +9,7 @@ from models import Glow
 from tqdm import tqdm
 from utils import sample, evaluate_1c, get_idx
 import matplotlib.pyplot as plt
+import torch.backends.cudnn as cudnn
 import os
 import torch.nn.functional as F
 from utils import boxplot_helper_1c, create_boxplot, count_parameters
@@ -39,8 +40,8 @@ def main(args):
     print(f'Supervision Ratio : {args.sup_ratio}\nCrap Ratio : {args.crap_ratio}\nShape Parameter : {args.shape}\nNoise : {args.noise}\nNoise Iteration : {args.noise_iter}')
 
 
-    # Initialize the model
-    # print('Building model..')
+    # Model
+    print('Building model..')
     net = Glow(num_channels=args.num_channels,
                num_levels=args.num_levels,
                num_steps=args.num_steps,
@@ -49,9 +50,13 @@ def main(args):
                cond_channel=args.cond_channel,
                cc = args.cc)
     net = net.to(device)
-
+    if device == 'cuda':
+        net = torch.nn.DataParallel(net, args.gpu_ids)
+        cudnn.benchmark = args.benchmark
+    
     # Loading the correct weights
-    path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
+    path = f'ckpts/resnet/{args.type}/{args.sup_ratio}_best.pth.tar'
+    # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
     checkpoint = torch.load(path, 
                             map_location = device)
     net.load_state_dict(checkpoint['net'])
@@ -70,52 +75,53 @@ def main(args):
     # for i in sup_ratio:
     #     std_dev(net, testloader, device, i, args.type, args.cc)
 
-    # # Visualizing the results
+    # Visualizing the results
     # for i in sup_ratio:
     #     print(i)
-    #     result(net, testloader, device, i, args.type)
+    result(net, testloader, device, args.sup_ratio, args.type)
+
+    # shape = [0.5, 0.75, 1.0, 1.5, 2.0]
+    # noise_iter = [1, 2, 4, 8, 16]
+    # for j in noise_iter:
+    #     # Checking the metrics related to different experiments
+    #     rrmse_val = list()
+    #     psnr_val = list()
+    #     ssim_val = list()
+    #     for i in shape:
+    #         print(i)
+    #         # Loading the correct weights
+    #         checkpoint = torch.load(f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{j}/{i}_best.pth.tar', 
+    #                                 map_location = device)
+    #         print('Building model..')
+    #         net = Glow(num_channels=args.num_channels,
+    #                num_levels=args.num_levels,
+    #                num_steps=args.num_steps,
+    #                mode=args.mode,
+    #                inp_channel=args.inp_channel,
+    #                cond_channel=args.cond_channel,
+    #                cc = args.cc)
+    #         net = net.to(device)
+    #         net.load_state_dict(checkpoint['net'])
+    #         rrmse = checkpoint['rrmse']
+    #         psnr = checkpoint['psnr']
+    #         ssim = checkpoint['ssim']
+    #         print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
+    #         print('Correct weights loaded!')
 
 
-    # # Checking the metrics related to different experiments
-    # rrmse_val = list()
-    # psnr_val = list()
-    # ssim_val = list()
-    # for i in shape:
-    #     print(i)
-    #     # Loading the correct weights
-    #     checkpoint = torch.load(f'ckpts/shape/{args.type}/{i}/0_best.pth.tar', 
-    #                             map_location = device)
-    #     print('Building model..')
-    #     net = Glow(num_channels=args.num_channels,
-    #            num_levels=args.num_levels,
-    #            num_steps=args.num_steps,
-    #            mode=args.mode,
-    #            inp_channel=args.inp_channel,
-    #            cond_channel=args.cond_channel,
-    #            cc = args.cc)
-    #     net = net.to(device)
-    #     net.load_state_dict(checkpoint['net'])
-    #     rrmse = checkpoint['rrmse']
-    #     psnr = checkpoint['psnr']
-    #     ssim = checkpoint['ssim']
-    #     print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
-    #     print('Correct weights loaded!')
+    #         # Evaluate the model
+    #         net.eval()
+    #         rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type)
+    #         rrmse_val.append(rrmse)
+    #         psnr_val.append(psnr)
+    #         ssim_val.append(ssim)
 
-
-    #     # Evaluate the model
-    #     net.eval()
-    #     rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type + '_out')
-    #     rrmse_val.append(rrmse)
-    #     psnr_val.append(psnr)
-    #     ssim_val.append(ssim)
-
-    # type = args.type
-    # rrmse_val, psnr_val, ssim_val = np.array(rrmse_val), np.array(psnr_val), np.array(ssim_val)
-    # p = f'experiments/shape/out_dist/'
-    # os.makedirs(p, exist_ok=True)
-    # create_boxplot(shape, rrmse_val, f'RRMSE', p + 'rrmse')
-    # create_boxplot(shape, psnr_val, f'PSNR', p + 'psnr')
-    # create_boxplot(shape, ssim_val, f'SSIM', p + 'ssim')
+    #     rrmse_val, psnr_val, ssim_val = np.array(rrmse_val), np.array(psnr_val), np.array(ssim_val)
+    #     p = f'experiments/robust/{args.type}/noise/{args.crap_ratio}/{j}/'
+    #     os.makedirs(p, exist_ok=True)
+    #     create_boxplot(shape, rrmse_val, f'RRMSE', p + 'rrmse')
+    #     create_boxplot(shape, psnr_val, f'PSNR', p + 'psnr')
+    #     create_boxplot(shape, ssim_val, f'SSIM', p + 'ssim')
 
 
 @torch.no_grad()
@@ -130,7 +136,7 @@ def result(net, loader, device, sup_ratio=1.0, type='ct'):
     print(f'idx1 : {idx1}, idx2 : {idx2}')
 
     # Path to save results
-    path = f'experiments/residue/{type}/{sup_ratio}/'
+    path = f'experiments/resnet/{type}/{sup_ratio}/'
     os.makedirs(path, exist_ok = True)
 
     # Calculation
@@ -150,9 +156,9 @@ def result(net, loader, device, sup_ratio=1.0, type='ct'):
         ld = ld.detach().cpu()
         pred_hd = pred_hd.detach().cpu()
         # x = torch.concat([ld, gt_hd, pred_hd], dim = 1)
-        x = torch.concat([gt_hd, pred_hd, torch.abs(gt_hd - pred_hd)], dim = 1)
+        x = torch.concat([ld, gt_hd, pred_hd, torch.abs(gt_hd - pred_hd)], dim = 1)
         plot1(x, sup_ratio, file = f'{path}{c}.png')
-        if c == 10:
+        if c == 20:
             break
 
 
@@ -228,25 +234,25 @@ def plot(x, sup_ratio, file = 'testing.png'):
 def plot1(x, sup_ratio, file = 'testing.png'):
     imgs = x.shape[0]
     batch = x.shape[1]
-    labels = ['Ground Truth', 'Predicted', 'Absolute Residue Value']
-    fig, ax = plt.subplots(imgs, batch, figsize = (30, 30))
+    labels = ['Low Dose', 'Ground Truth', 'Predicted', 'Absolute Residue Value']
+    fig, ax = plt.subplots(imgs, batch, figsize = (40, 30))
     fig.subplots_adjust(wspace = 0.01, hspace = -0.48)
     for i in range(batch):
         for j in range(imgs):
-            if i != 2:
-                ax[j, i].imshow(x[j, i, :, :], cmap = 'jet')
+            if i != 3:
+                ax[j, i].imshow(x[j, i, :, :], cmap = 'gray')
             else:
                 # print(x[j, i, :, :].min(),  np.percentile(x[j, i, :].numpy(), 99.2))
-                im = ax[j, i].imshow(x[j, i, :, :], cmap = 'jet',
-                         vmin = 0,
-                         vmax = 0.04)
+                im = ax[j, i].imshow(x[j, i, :, :], cmap = 'jet')
+                        #  vmin = 0,
+                        #  vmax = 0.04)
                         #  vmax = np.percentile(x[j, i, :].numpy(), 99.9))
             ax[j, i].axis('off')
             if j == 0:
                 ax[j, i].set_title(labels[i], fontsize = 40)
 
     title = plt.title(f'Results for {int(sup_ratio * 100)}% Supervision',
-              loc = 'center', x = -0.5, y = 1.96)
+              loc = 'center', x = -1, y = 1.96)
     title.set_fontsize(40) 
     cbar = plt.colorbar(im, ax=ax, orientation = 'horizontal', 
                  pad = 0.01, aspect = 100)
@@ -258,9 +264,9 @@ if __name__ == '__main__':
     def str2bool(s):
         return s.lower().startswith('t')
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_channels', type = int, default = 128)
-    parser.add_argument('--num_levels', type = int, default = 4)
-    parser.add_argument('--num_steps', type = int, default = 8)
+    parser.add_argument('--num_channels', type = int, default = 64)
+    parser.add_argument('--num_levels', type = int, default = 5)
+    parser.add_argument('--num_steps', type = int, default = 10)
     parser.add_argument('--gpu_id', type = int, default = 0)
     parser.add_argument('--sup_ratio', type = float, default = 1.0)
     parser.add_argument('--seed', type = int, default = 0)

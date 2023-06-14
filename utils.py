@@ -11,8 +11,8 @@ import pdb
 @torch.no_grad()
 def sample(net, origin_img, gray_img, device, sigma=0.2):
     B, C, W, H = origin_img.shape
-    z = torch.zeros((B, C, W, H), device = device)
-    # z = torch.randn((B, C, W, H), dtype=torch.float32, device=device) * sigma
+    # z = torch.zeros((B, C, W, H), device = device)
+    z = torch.randn((B, C, W, H), dtype=torch.float32, device=device) * sigma
     x, _ = net(z, gray_img, reverse=True)
     x = torch.sigmoid(x)
     return x
@@ -102,7 +102,8 @@ def create_boxplot(labels, values, title, name):
         # ax.text(mean - 0.2 * std, i + 1, 'Std: {:.2f}'.format(std * 100), va='center')
 
     ax.set_yticklabels(labels)
-    ax.set_ylabel('% of Supervision')
+    # ax.set_ylabel('% of Supervision')
+    ax.set_ylabel('Shape Parameter')
     # ax.set_ylabel('Conditional Input')
     # ax.set_ylabel('Separate Coupling Layer for Conditional Input')
     plt.title(title)
