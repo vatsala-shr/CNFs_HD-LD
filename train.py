@@ -26,6 +26,7 @@ from utils import count_parameters, sample, get_idx
 from skimage.metrics import structural_similarity as ssim
 import numpy as np
 import pickle
+import kornia.losses as loss
 
 def main(args):
     # Set up main device and scale batch size
@@ -47,8 +48,8 @@ def main(args):
                           noise=args.noise,
                           noise_iter=args.noise_iter)
     test_set = CT(train = False)
-    trainloader = data.DataLoader(train_set, batch_size=4, shuffle=True, num_workers=args.num_workers)
-    testloader = data.DataLoader(test_set, batch_size=4, shuffle=False, num_workers=args.num_workers)
+    trainloader = data.DataLoader(train_set, batch_size=2, shuffle=True, num_workers=args.num_workers)
+    testloader = data.DataLoader(test_set, batch_size=2, shuffle=False, num_workers=args.num_workers)
 
     # Model
     print('Building model..')
@@ -68,7 +69,7 @@ def main(args):
     # path = f'ckpts/shape/{args.type}/{args.shape}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/out_dist/{args.crap_ratio}/{args.shape}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
-    path = f'ckpts/resnet/{args.type}/{args.sup_ratio}_best.pth.tar'
+    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_best.pth.tar'
    
     start_epoch = 0
     global best_ssim
@@ -89,6 +90,7 @@ def main(args):
          best_ssim = 0
 
     loss_fn = util.NLLLoss().to(device)
+    ssim_loss = loss.SSIMLoss(window_size = 11).to(device)
     # loss_fn = util.NLLLoss(shape = args.shape, device = device).to(device)
     optimizer = optim.Adam(net.parameters(), lr=args.lr)
     scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
@@ -99,7 +101,7 @@ def main(args):
     while epoch <= args.num_epochs:
         c += 1
         train(epoch, net, trainloader, device, optimizer, scheduler,
-              loss_fn, type = args.type)
+              loss_fn, ssim_loss, type = args.type)
         if test(epoch, net, testloader, device, args, path):
             if os.path.exists(path):  
                 checkpoint = torch.load(path, map_location = device)
@@ -146,7 +148,7 @@ def main(args):
     # evaluate_1c(net, testloader, device, args.type)
 
 @torch.enable_grad()
-def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_grad_norm = -1, type = 'ct'):
+def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, ssim_loss, max_grad_norm = -1, type = 'ct'):
     global global_step
     print('\nEpoch: %d' % epoch)
     net.train()
@@ -164,7 +166,10 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
             x , cond_x= x.to(device), cond_x.to(device)
             optimizer.zero_grad()
             z, sldj = net(x, cond_x, reverse=False)
-            loss = loss_fn(z, sldj)
+            loss1 = loss_fn(z, sldj)
+            rec_x, sldj = net(z, cond_x, reverse=True)
+            loss2 = ssim_loss(rec_x, x)
+            loss = loss1 + loss2
             loss_meter.update(loss.item(), x.size(0))
             loss.backward()
             if max_grad_norm > 0:

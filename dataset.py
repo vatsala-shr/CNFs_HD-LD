@@ -74,7 +74,7 @@ class CT:
         pet_ld_out = self.t(pet_ld_out)
         mask = mask[:, 2:-2, 2:-2]
         x = torch.concat([ct_hd, pet_hd, ct_ld, pet_ld, mask, ct_ld_out, pet_ld_out], dim = 0)
-
+        # x = torch.concat([ct_hd, ct_ld], dim = 0)
         if self.transform is not None:
             x = self.transform(x)
         
@@ -86,7 +86,7 @@ class CT:
     
 # train_set = CT(num_hd = int(1 * 200),
 #                transform=transform,
-#                num_crap=200,
+#                num_crap=0,
 #                noise = True,
 #                noise_iter = 0)
 # test_set = CT(transform = transform,
@@ -95,7 +95,6 @@ class CT:
 # for i in range(train_set.__len__()):
 #     x_prime = train_set.__getitem__(i).unsqueeze(1)
 #     print(x_prime.shape)
-#     print(x_prime[4, :, :].unique())
-#     image = torchvision.utils.make_grid(x_prime, nrow = 5, padding = 2, pad_value = 128)
-#     torchvision.utils.save_image(image, f'testing.png')
-#     sleep(2)
+#     image = torchvision.utils.make_grid(x_prime, nrow = 2, padding = 2, pad_value = 128)
+#     torchvision.utils.save_image(image, f'train_data/{i}.png')
+#     # sleep(0.2)
