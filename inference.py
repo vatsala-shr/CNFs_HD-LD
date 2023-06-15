@@ -55,6 +55,7 @@ def main(args):
         cudnn.benchmark = args.benchmark
     
     # Loading the correct weights
+    # path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_sl_best.pth.tar'
     path = f'ckpts/resnet/{args.type}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
     checkpoint = torch.load(path, 
@@ -67,6 +68,9 @@ def main(args):
     ssim = checkpoint['ssim']
     print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
 
+    net.eval()
+    rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type)
+
     # # # Finding standard deviation across samples generated under certain sup_ratio
     # sup_ratio = [0.0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0]
     # shape = [0.75, 1.0, 1.5, 2.0]
@@ -78,7 +82,7 @@ def main(args):
     # Visualizing the results
     # for i in sup_ratio:
     #     print(i)
-    result(net, testloader, device, args.sup_ratio, args.type)
+    # result(net, testloader, device, args.sup_ratio, args.type)
 
     # shape = [0.5, 0.75, 1.0, 1.5, 2.0]
     # noise_iter = [1, 2, 4, 8, 16]
@@ -127,7 +131,9 @@ def main(args):
 @torch.no_grad()
 def result(net, loader, device, sup_ratio=1.0, type='ct'):
     # Loading the correct weights
-    checkpoint = torch.load(f'ckpts/resnet/{type}/{sup_ratio}_best.pth.tar', 
+    path = f'ckpts/resnet/{type}/{sup_ratio}_best.pth.tar'
+    # path = f'ckpts/new_loss/{type}/{sup_ratio}_sl_best.pth.tar'
+    checkpoint = torch.load(path, 
                             map_location = device)
     net.load_state_dict(checkpoint['net'])
     print('Correct weights loaded!')
@@ -136,7 +142,8 @@ def result(net, loader, device, sup_ratio=1.0, type='ct'):
     print(f'idx1 : {idx1}, idx2 : {idx2}')
 
     # Path to save results
-    path = f'experiments/resnet/{type}/{sup_ratio}/'
+    path = f'experiments/new_loss/{type}/{sup_ratio}/'
+    # path = f'experiments/new_loss/{type}/{sup_ratio}_sl/'
     os.makedirs(path, exist_ok = True)
 
     # Calculation
@@ -264,9 +271,9 @@ if __name__ == '__main__':
     def str2bool(s):
         return s.lower().startswith('t')
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_channels', type = int, default = 64)
-    parser.add_argument('--num_levels', type = int, default = 5)
-    parser.add_argument('--num_steps', type = int, default = 10)
+    parser.add_argument('--num_channels', type = int, default = 128)
+    parser.add_argument('--num_levels', type = int, default = 4)
+    parser.add_argument('--num_steps', type = int, default = 8)
     parser.add_argument('--gpu_id', type = int, default = 0)
     parser.add_argument('--sup_ratio', type = float, default = 1.0)
     parser.add_argument('--seed', type = int, default = 0)
@@ -278,7 +285,7 @@ if __name__ == '__main__':
     parser.add_argument('--shape', type=float, default=1)
     parser.add_argument('--mode', default="sketch", choices=['gray', 'sketch'])
     parser.add_argument('--noise_iter', default=1, type=int)
-    parser.add_argument('--crap_ratio', default=0.1, type=float)
-    parser.add_argument('--noise', default=True, type=bool)
+    parser.add_argument('--crap_ratio', default=0.0, type=float)
+    parser.add_argument('--noise', default=False, type=bool)
     parser.add_argument('--si_ld', type=bool, default=False)
     main(parser.parse_args())

@@ -70,7 +70,7 @@ def main(args):
     # path = f'ckpts/shape/{args.type}/{args.shape}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/out_dist/{args.crap_ratio}/{args.shape}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
-    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_best.pth.tar'
+    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_sl_best.pth.tar'
    
     start_epoch = 0
     global best_ssim
@@ -157,6 +157,7 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, ssim_l
     ssim_loss_m = util.AverageMeter()
     mse_loss_m = util.AverageMeter()
     idx1, idx2 = get_idx(type)
+    smooth_l1_loss = torch.nn.SmoothL1Loss().to(device)
 
     with tqdm(total=len(trainloader.dataset)) as progress_bar:
         for i, x_prime in enumerate(trainloader):
@@ -171,17 +172,41 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, ssim_l
             x , cond_x = x.to(device), cond_x.to(device)
             optimizer.zero_grad()
             z, sldj = net(x, cond_x, reverse=False)
-            loss = loss_fn(z, sldj)
-            latent_loss_m.update(loss.item(), x.size(0))
+            loss1 = loss_fn(z, sldj)
+            new_z = torch.randn(x.shape, dtype=torch.float32, device=device) * 0.6
+            rec_x, sldj = net(new_z, cond_x, reverse=True)
+            rec_x = torch.sigmoid(rec_x)
+            # mse_loss = F.mse_loss(rec_x, x)
+            mse_loss = smooth_l1_loss(rec_x, x)
+            ssim_loss = 1 - ssim1(rec_x, x, data_range = 1)
+
+            # if i == 0:
+            #     fig, ax = plt.subplots(1, 3, figsize = (30, 30))
+            #     ax[0].imshow(x[0, 0, :, :].detach().cpu(), cmap = 'gray')
+            #     ax[1].imshow(rec_x[0, 0, :, :].detach().cpu(), cmap = 'gray')
+            #     ax[2].imshow(cond_x[0, 0, :, :].detach().cpu(), cmap = 'gray')
+            #     ax[0].axis('off')
+            #     ax[1].axis('off')
+            #     ax[2].axis('off')
+            #     plt.show()
+            #     os.makedirs(f'{args.sup_ratio}', exist_ok = True)
+            #     plt.savefig(f'{args.sup_ratio}/{i}.png', bbox_inches = 'tight')
+            #     plt.close()
+
+            loss2 = mse_loss + ssim_loss
+            loss = loss1 + loss2
+            latent_loss_m.update(loss1.item(), x.size(0))
+            mse_loss_m.update(mse_loss.sqrt().item(), x.size(0))
+            ssim_loss_m.update(ssim_loss.item(), x.size(0))
             loss.backward()
             if max_grad_norm > 0:
                 util.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
             scheduler.step(global_step)
 
-            progress_bar.set_postfix(nll=latent_loss_m.avg,
-                                     bpd=util.bits_per_dim(x, latent_loss_m.avg),
-                                     lr=optimizer.param_groups[0]['lr'])
+            progress_bar.set_postfix(bpd=util.bits_per_dim(x, latent_loss_m.avg),
+                                     ssim=ssim_loss_m.avg,
+                                     l1=mse_loss_m.avg)
             progress_bar.update(x.size(0))
             global_step += x.size(0)
 

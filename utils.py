@@ -7,12 +7,13 @@ import torch.nn.functional as F
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 import pdb
+from pytorch_msssim import ssim as ssim1
 
 @torch.no_grad()
 def sample(net, origin_img, gray_img, device, sigma=0.2):
     B, C, W, H = origin_img.shape
-    # z = torch.zeros((B, C, W, H), device = device)
-    z = torch.randn((B, C, W, H), dtype=torch.float32, device=device) * sigma
+    z = torch.zeros((B, C, W, H), device = device)
+    # z = torch.randn((B, C, W, H), dtype=torch.float32, device=device) * sigma
     x, _ = net(z, gray_img, reverse=True)
     x = torch.sigmoid(x)
     return x
@@ -50,8 +51,6 @@ def evaluate_1c(net, loader, device, type = 'ct'):
         origin_img = (origin_img * (max_val - min_val)) + min_val
         t1 = images.squeeze(1).detach().cpu().numpy()
         t2 = origin_img.squeeze(1).detach().cpu().numpy()
-        mask = mask.squeeze(1).detach().cpu().numpy()
-        
         s = 0
         for idx in range(t1.shape[0]):
             _, smap = ssim(t1[idx],
@@ -61,8 +60,10 @@ def evaluate_1c(net, loader, device, type = 'ct'):
                            sigma=4,
                            full=True)
             s += np.mean(smap)
-        
+
+        # s = ssim1(t1.unsqueeze(1).numpy(), t2.unsqueeze(1).numpy(), data_range = max_val - min_val)        
         ssim_val.append(s / t1.shape[0])
+        # ssim_val.append(s.detach().cpu())
         rrmse_val.append(r)
         psnr_val.append(p)
     
