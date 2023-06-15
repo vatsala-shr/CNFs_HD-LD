@@ -70,7 +70,7 @@ def main(args):
     # path = f'ckpts/shape/{args.type}/{args.shape}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/out_dist/{args.crap_ratio}/{args.shape}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
-    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_sl_best.pth.tar'
+    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_sl_osc_best.pth.tar'
    
     start_epoch = 0
     global best_ssim
@@ -173,11 +173,14 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, ssim_l
             optimizer.zero_grad()
             z, sldj = net(x, cond_x, reverse=False)
             loss1 = loss_fn(z, sldj)
-            new_z = torch.randn(x.shape, dtype=torch.float32, device=device) * 0.6
+            loss1.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            new_z = torch.randn(x.shape, dtype=torch.float32, device=device) * 0.0
             rec_x, sldj = net(new_z, cond_x, reverse=True)
             rec_x = torch.sigmoid(rec_x)
             # mse_loss = F.mse_loss(rec_x, x)
-            mse_loss = smooth_l1_loss(rec_x, x)
+            l1_loss = smooth_l1_loss(rec_x, x)
             ssim_loss = 1 - ssim1(rec_x, x, data_range = 1)
 
             # if i == 0:
@@ -193,15 +196,17 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, ssim_l
             #     plt.savefig(f'{args.sup_ratio}/{i}.png', bbox_inches = 'tight')
             #     plt.close()
 
-            loss2 = mse_loss + ssim_loss
+            loss2 = l1_loss + ssim_loss
+            loss2.backward()
+            optimizer.step()
             loss = loss1 + loss2
             latent_loss_m.update(loss1.item(), x.size(0))
-            mse_loss_m.update(mse_loss.sqrt().item(), x.size(0))
+            mse_loss_m.update(l1_loss.item(), x.size(0))
             ssim_loss_m.update(ssim_loss.item(), x.size(0))
-            loss.backward()
+            # loss.backward()
             if max_grad_norm > 0:
                 util.clip_grad_norm(optimizer, max_grad_norm)
-            optimizer.step()
+            # optimizer.step()
             scheduler.step(global_step)
 
             progress_bar.set_postfix(bpd=util.bits_per_dim(x, latent_loss_m.avg),
