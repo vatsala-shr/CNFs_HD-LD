@@ -13,6 +13,8 @@ import torch.backends.cudnn as cudnn
 import os
 import torch.nn.functional as F
 from utils import boxplot_helper_1c, create_boxplot, count_parameters
+# from pytorch_msssim import ssim
+import kornia.losses as loss
 
 def main(args):
     # Set up main device
@@ -34,8 +36,8 @@ def main(args):
                           noise=args.noise,
                           noise_iter=args.noise_iter)
     test_set = CT(train = False)
-    trainloader = data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=args.num_workers)
-    testloader = data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=args.num_workers)
+    trainloader = data.DataLoader(train_set, batch_size=2, shuffle=True, num_workers=args.num_workers)
+    testloader = data.DataLoader(test_set, batch_size=2, shuffle=False, num_workers=args.num_workers)
 
     print(f'Supervision Ratio : {args.sup_ratio}\nCrap Ratio : {args.crap_ratio}\nShape Parameter : {args.shape}\nNoise : {args.noise}\nNoise Iteration : {args.noise_iter}')
 
@@ -58,7 +60,7 @@ def main(args):
     ext = args.ext
     # Loading the correct weights
     # path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_sl_best.pth.tar'
-    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}{ext}_best.pth.tar'
+    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{ext}.pth.tar'
     print(path)
     # path = f'ckpts/resnet/{args.type}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
@@ -137,7 +139,7 @@ def result(net, loader, device, sup_ratio=1.0, type='ct'):
     # Loading the correct weights
     # path = f'ckpts/resnet/{type}/{sup_ratio}_best.pth.tar'
     # path = f'ckpts/new_loss/{type}/{sup_ratio}_sl_best.pth.tar'
-    path = f'ckpts/new_loss/{type}/{sup_ratio}{ext}_best.pth.tar'
+    path = f'ckpts/new_loss/{type}/{sup_ratio}_{ext}.pth.tar'
     checkpoint = torch.load(path, 
                             map_location = device)
     net.load_state_dict(checkpoint['net'])
@@ -148,7 +150,7 @@ def result(net, loader, device, sup_ratio=1.0, type='ct'):
 
     # Path to save results
     # path = f'experiments/new_loss/{type}/{sup_ratio}/'
-    path = f'experiments/new_loss/{type}/{sup_ratio}{ext}/'
+    path = f'experiments/new_loss/{type}/{sup_ratio}_{ext}_ssim/'
     os.makedirs(path, exist_ok = True)
 
     # Calculation
@@ -168,7 +170,16 @@ def result(net, loader, device, sup_ratio=1.0, type='ct'):
         ld = ld.detach().cpu()
         pred_hd = pred_hd.detach().cpu()
         # x = torch.concat([ld, gt_hd, pred_hd], dim = 1)
-        x = torch.concat([ld, gt_hd, pred_hd, torch.abs(gt_hd - pred_hd)], dim = 1)
+        # min_val, max_val = -1024, 1500  
+        # images = (gt_hd * (max_val - min_val)) + min_val
+        # origin_img = (pred_hd * (max_val - min_val)) + min_val
+        # t1 = images.detach().cpu().numpy()
+        # t2 = origin_img.detach().cpu().numpy()
+        # print(t1.shape)
+        s = 1 - loss.ssim_loss(gt_hd, pred_hd, window_size = 11, max_val = 1.0, reduction = None)
+        # print(s.shape)
+        # x = torch.concat([ld, gt_hd, pred_hd, torch.abs(gt_hd - pred_hd)],dim = 1)
+        x = torch.concat([ld, gt_hd, pred_hd, s],dim = 1)
         plot1(x, sup_ratio, file = f'{path}{c}.png')
         if c == 10:
             break
@@ -244,9 +255,10 @@ def plot(x, sup_ratio, file = 'testing.png'):
     plt.close()
 
 def plot1(x, sup_ratio, file = 'testing.png'):
+    print(x.shape)
     imgs = x.shape[0]
     batch = x.shape[1]
-    labels = ['Low Dose', 'Ground Truth', 'Predicted', 'Absolute Residue Value']
+    labels = ['Low Dose', 'Ground Truth', 'Predicted', 'SSIM Value']
     fig, ax = plt.subplots(imgs, batch, figsize = (40, 30))
     fig.subplots_adjust(wspace = 0.01, hspace = -0.48)
     for i in range(batch):
@@ -255,9 +267,9 @@ def plot1(x, sup_ratio, file = 'testing.png'):
                 ax[j, i].imshow(x[j, i, :, :], cmap = 'gray')
             else:
                 # print(x[j, i, :, :].min(),  np.percentile(x[j, i, :].numpy(), 99.2))
-                im = ax[j, i].imshow(x[j, i, :, :], cmap = 'jet',
-                         vmin = 0,
-                         vmax = 0.02)
+                im = ax[j, i].imshow(x[j, i, :, :], cmap = 'jet')
+                        #  vmin = 0,
+                        #  vmax = 0.02)
                         #  vmax = np.percentile(x[j, i, :].numpy(), 99.9))
             ax[j, i].axis('off')
             if j == 0:
