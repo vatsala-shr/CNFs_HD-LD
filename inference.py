@@ -88,7 +88,7 @@ def main(args):
     # Visualizing the results
     # for i in sup_ratio:
     #     print(i)
-    result(net, testloader, device, args.sup_ratio, args.type)
+    # result(net, testloader, device, args.sup_ratio, args.type)
 
     # shape = [0.5, 0.75, 1.0, 1.5, 2.0]
     # noise_iter = [1, 2, 4, 8, 16]
@@ -97,41 +97,43 @@ def main(args):
     #     rrmse_val = list()
     #     psnr_val = list()
     #     ssim_val = list()
-    #     for i in shape:
-    #         print(i)
-    #         # Loading the correct weights
-    #         checkpoint = torch.load(f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{j}/{i}_best.pth.tar', 
-    #                                 map_location = device)
-    #         print('Building model..')
-    #         net = Glow(num_channels=args.num_channels,
-    #                num_levels=args.num_levels,
-    #                num_steps=args.num_steps,
-    #                mode=args.mode,
-    #                inp_channel=args.inp_channel,
-    #                cond_channel=args.cond_channel,
-    #                cc = args.cc)
-    #         net = net.to(device)
-    #         net.load_state_dict(checkpoint['net'])
-    #         rrmse = checkpoint['rrmse']
-    #         psnr = checkpoint['psnr']
-    #         ssim = checkpoint['ssim']
-    #         print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
-    #         print('Correct weights loaded!')
+    shape = ['ll', 'll+sl', 'll_then_sl']
+    for i in shape:
+        print(i)
+        # Loading the correct weights
+        path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{i}.pth.tar'
+        checkpoint = torch.load(path, 
+                                map_location = device)
+        print('Building model..')
+        net = Glow(num_channels=args.num_channels,
+                num_levels=args.num_levels,
+                num_steps=args.num_steps,
+                mode=args.mode,
+                inp_channel=args.inp_channel,
+                cond_channel=args.cond_channel,
+                cc = args.cc)
+        net = net.to(device)
+        net.load_state_dict(checkpoint['net'])
+        rrmse = checkpoint['rrmse']
+        psnr = checkpoint['psnr']
+        ssim = checkpoint['ssim']
+        print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
+        print('Correct weights loaded!')
 
 
-    #         # Evaluate the model
-    #         net.eval()
-    #         rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type)
-    #         rrmse_val.append(rrmse)
-    #         psnr_val.append(psnr)
-    #         ssim_val.append(ssim)
+        # Evaluate the model
+        net.eval()
+        rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type)
+        rrmse_val.append(rrmse)
+        psnr_val.append(psnr)
+        ssim_val.append(ssim)
 
-    #     rrmse_val, psnr_val, ssim_val = np.array(rrmse_val), np.array(psnr_val), np.array(ssim_val)
-    #     p = f'experiments/robust/{args.type}/noise/{args.crap_ratio}/{j}/'
-    #     os.makedirs(p, exist_ok=True)
-    #     create_boxplot(shape, rrmse_val, f'RRMSE', p + 'rrmse')
-    #     create_boxplot(shape, psnr_val, f'PSNR', p + 'psnr')
-    #     create_boxplot(shape, ssim_val, f'SSIM', p + 'ssim')
+    rrmse_val, psnr_val, ssim_val = np.array(rrmse_val), np.array(psnr_val), np.array(ssim_val)
+    p = f'experiments/metrics/{args.type}/{args.sup_ratio}/'
+    os.makedirs(p, exist_ok=True)
+    create_boxplot(shape, rrmse_val, f'RRMSE', p + 'rrmse')
+    create_boxplot(shape, psnr_val, f'PSNR', p + 'psnr')
+    create_boxplot(shape, ssim_val, f'SSIM', p + 'ssim')
 
 
 @torch.no_grad()
@@ -258,7 +260,7 @@ def plot1(x, sup_ratio, file = 'testing.png'):
     print(x.shape)
     imgs = x.shape[0]
     batch = x.shape[1]
-    labels = ['Low Dose', 'Ground Truth', 'Predicted', 'SSIM Value']
+    labels = ['Low Dose', 'Ground Truth', 'Predicted', 'L1 Value']
     fig, ax = plt.subplots(imgs, batch, figsize = (40, 30))
     fig.subplots_adjust(wspace = 0.01, hspace = -0.48)
     for i in range(batch):
