@@ -49,8 +49,8 @@ def main(args):
                           noise=args.noise,
                           noise_iter=args.noise_iter)
     test_set = CT(train = False)
-    trainloader = data.DataLoader(train_set, batch_size=args.bs, shuffle=True, num_workers=args.num_workers)
-    testloader = data.DataLoader(test_set, batch_size=args.bs, shuffle=False, num_workers=args.num_workers)
+    trainloader = data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=args.num_workers)
+    testloader = data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=args.num_workers)
 
     # Model
     print('Building model..')
@@ -70,7 +70,7 @@ def main(args):
     # path = f'ckpts/shape/{args.type}/{args.shape}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/out_dist/{args.crap_ratio}/{args.shape}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
-    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_best.pth.tar'
+    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{args.ext}.pth.tar'
    
     start_epoch = 0
     global best_ssim
@@ -91,7 +91,6 @@ def main(args):
          best_ssim = 0
 
     loss_fn = util.NLLLoss().to(device)
-    ssim_loss = loss.SSIMLoss(window_size = 11).to(device)
     # loss_fn = util.NLLLoss(shape = args.shape, device = device).to(device)
     optimizer = optim.Adam(net.parameters(), lr=args.lr)
     scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
@@ -103,7 +102,7 @@ def main(args):
     while epoch <= args.num_epochs:
         c += 1
         train(epoch, net, trainloader, device, optimizer, scheduler,
-              loss_fn, ssim_loss, type = args.type, args = args)
+              loss_fn, type = args.type, args = args)
         if test(epoch, net, testloader, device, args, path, history):
             if os.path.exists(path):  
                 checkpoint = torch.load(path, map_location = device)
@@ -145,20 +144,22 @@ def main(args):
             print('Sufficient Epoch Completed!')
             print(f'Best SSIM : {best_ssim}')
             break
+        # print(history)
 
         os.makedirs(f'history/{args.type}', exist_ok=True)
-        file = open(f'history/{args.type}/{args.sup_ratio}.pkl', 'wb')
+        file = open(f'history/{args.type}/{args.sup_ratio}_{args.ext}.pkl', 'wb')
         pickle.dump(history, file)
 
 @torch.enable_grad()
-def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, ssim_loss, max_grad_norm = -1, type = 'ct', args = None):
+def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_grad_norm = -1, type = 'ct', args = None):
     global global_step
     print('\nEpoch: %d' % epoch)
     net.train()
     latent_loss_m = util.AverageMeter()
     ssim_loss_m = util.AverageMeter()
-    mse_loss_m = util.AverageMeter()
+    l1_loss_m = util.AverageMeter()
     idx1, idx2 = get_idx(type)
+    smooth_l1_loss = torch.nn.SmoothL1Loss().to(device)
 
     with tqdm(total=len(trainloader.dataset)) as progress_bar:
         for i, x_prime in enumerate(trainloader):
@@ -170,22 +171,78 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, ssim_l
                 x = x.unsqueeze(1)
             if len(cond_x.shape) < 4:
                 cond_x = cond_x.unsqueeze(1)
-            x , cond_x = x.to(device), cond_x.to(device)
-            optimizer.zero_grad()
+            x, cond_x = x.to(device), cond_x.to(device)
             z, sldj = net(x, cond_x, reverse=False)
-            loss = loss_fn(z, sldj)
-            latent_loss_m.update(loss.item(), x.size(0))
-            loss.backward()
-            if max_grad_norm > 0:
-                util.clip_grad_norm(optimizer, max_grad_norm)
-            optimizer.step()
-            scheduler.step(global_step)
 
-            progress_bar.set_postfix(nll=latent_loss_m.avg,
-                                     bpd=util.bits_per_dim(x, latent_loss_m.avg),
-                                     lr=optimizer.param_groups[0]['lr'])
-            progress_bar.update(x.size(0))
-            global_step += x.size(0)
+            if args.ext == 'll+sl':
+                optimizer.zero_grad()
+                latent_loss = loss_fn(z, sldj)
+                new_z = torch.randn(x.shape, dtype=torch.float32, device=device) * 0.6
+                rec_x, sldj = net(new_z, cond_x, reverse=True)
+                rec_x = mask * torch.sigmoid(rec_x)
+                l1_loss = smooth_l1_loss(rec_x, x)
+                ssim_loss = 1 - ssim1(rec_x, x, data_range = 1)
+                loss = latent_loss + l1_loss + ssim_loss
+                loss.backward()
+                if max_grad_norm > 0:
+                    util.clip_grad_norm(optimizer, max_grad_norm)
+                optimizer.step()
+                scheduler.step(global_step)
+
+                latent_loss_m.update(latent_loss.item(), x.size(0))
+                l1_loss_m.update(l1_loss.item(), x.size(0))
+                ssim_loss_m.update(ssim_loss.item(), x.size(0))
+                progress_bar.set_postfix(bpd=util.bits_per_dim(x, latent_loss_m.avg),
+                                        ssim=ssim_loss_m.avg,
+                                        l1=l1_loss_m.avg)
+                progress_bar.update(x.size(0))
+                global_step += x.size(0)
+
+            elif args.ext == 'll_then_sl':
+                optimizer.zero_grad()
+                latent_loss = loss_fn(z, sldj)
+                latent_loss.backward()
+                if max_grad_norm > 0:
+                    util.clip_grad_norm(optimizer, max_grad_norm)
+                optimizer.step()
+                scheduler.step(global_step)
+
+                new_z = torch.randn(x.shape, dtype=torch.float32, device=device) * 0.6
+                rec_x, sldj = net(new_z, cond_x, reverse=True)
+                rec_x = mask * torch.sigmoid(rec_x)
+                optimizer.zero_grad()
+                l1_loss = smooth_l1_loss(rec_x, x)
+                ssim_loss = 1 - ssim1(rec_x, x, data_range = 1)
+                spatial_loss = l1_loss + ssim_loss
+                spatial_loss.backward()
+                if max_grad_norm > 0:
+                    util.clip_grad_norm(optimizer, max_grad_norm)
+                optimizer.step()
+                scheduler.step(global_step)
+
+                latent_loss_m.update(latent_loss.item(), x.size(0))
+                l1_loss_m.update(l1_loss.item(), x.size(0))
+                ssim_loss_m.update(ssim_loss.item(), x.size(0))
+                progress_bar.set_postfix(bpd=util.bits_per_dim(x, latent_loss_m.avg),
+                                        ssim=ssim_loss_m.avg,
+                                        l1=l1_loss_m.avg)
+                progress_bar.update(x.size(0))
+                global_step += x.size(0)
+
+            elif args.ext == 'll':
+                latent_loss = loss_fn(z, sldj)
+                latent_loss.backward()
+                if max_grad_norm > 0:
+                    util.clip_grad_norm(optimizer, max_grad_norm)
+                optimizer.step()
+                scheduler.step(global_step)
+
+                latent_loss_m.update(latent_loss.item(), x.size(0))
+                progress_bar.set_postfix(nll=latent_loss_m.avg,
+                                        bpd=util.bits_per_dim(x, latent_loss_m.avg),
+                                        lr=optimizer.param_groups[0]['lr'])
+                progress_bar.update(x.size(0))
+                global_step += x.size(0)
 
 
 @torch.no_grad()
@@ -227,7 +284,7 @@ if __name__ == '__main__':
     def str2bool(s):
         return s.lower().startswith('t')
 
-    parser.add_argument('--bs', default=4, type=int, help='Batch size per GPU')
+    parser.add_argument('--batch_size', default=4, type=int, help='Batch size per GPU')
     parser.add_argument('--benchmark', type=str2bool, default=True, help='Turn on CUDNN benchmarking')
     parser.add_argument('--gpu_id', default=6, type=int, help='ID of GPUs to use')
     parser.add_argument('--lr', default=1e-3, type=float, help='Learning rate')
@@ -252,6 +309,7 @@ if __name__ == '__main__':
     parser.add_argument('--si_ld', type = bool, default = False)
     parser.add_argument('--noise_iter', default=1, type=int)
     parser.add_argument('--noise', default = False, type=bool)
+    parser.add_argument('--ext', default = 'll', type=str)
     best_loss = float('inf')
     best_ssim = 0
     best_epoch = 0

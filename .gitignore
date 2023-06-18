@@ -2,3 +2,4 @@ ckpts/
 data/
 experiments/
 *.png
+history/
