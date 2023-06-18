@@ -34,8 +34,8 @@ def main(args):
                           noise=args.noise,
                           noise_iter=args.noise_iter)
     test_set = CT(train = False)
-    trainloader = data.DataLoader(train_set, batch_size=2, shuffle=True, num_workers=args.num_workers)
-    testloader = data.DataLoader(test_set, batch_size=2, shuffle=False, num_workers=args.num_workers)
+    trainloader = data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=args.num_workers)
+    testloader = data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=args.num_workers)
 
     print(f'Supervision Ratio : {args.sup_ratio}\nCrap Ratio : {args.crap_ratio}\nShape Parameter : {args.shape}\nNoise : {args.noise}\nNoise Iteration : {args.noise_iter}')
 
@@ -53,10 +53,14 @@ def main(args):
     if device == 'cuda':
         net = torch.nn.DataParallel(net, args.gpu_ids)
         cudnn.benchmark = args.benchmark
-    
+
+    global ext
+    ext = args.ext
     # Loading the correct weights
     # path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_sl_best.pth.tar'
-    path = f'ckpts/resnet/{args.type}/{args.sup_ratio}_best.pth.tar'
+    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}{ext}_best.pth.tar'
+    print(path)
+    # path = f'ckpts/resnet/{args.type}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
     checkpoint = torch.load(path, 
                             map_location = device)
@@ -68,8 +72,8 @@ def main(args):
     ssim = checkpoint['ssim']
     print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
 
-    net.eval()
-    rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type)
+    # net.eval()
+    # rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type)
 
     # # # Finding standard deviation across samples generated under certain sup_ratio
     # sup_ratio = [0.0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0]
@@ -82,7 +86,7 @@ def main(args):
     # Visualizing the results
     # for i in sup_ratio:
     #     print(i)
-    # result(net, testloader, device, args.sup_ratio, args.type)
+    result(net, testloader, device, args.sup_ratio, args.type)
 
     # shape = [0.5, 0.75, 1.0, 1.5, 2.0]
     # noise_iter = [1, 2, 4, 8, 16]
@@ -131,8 +135,9 @@ def main(args):
 @torch.no_grad()
 def result(net, loader, device, sup_ratio=1.0, type='ct'):
     # Loading the correct weights
-    path = f'ckpts/resnet/{type}/{sup_ratio}_best.pth.tar'
+    # path = f'ckpts/resnet/{type}/{sup_ratio}_best.pth.tar'
     # path = f'ckpts/new_loss/{type}/{sup_ratio}_sl_best.pth.tar'
+    path = f'ckpts/new_loss/{type}/{sup_ratio}{ext}_best.pth.tar'
     checkpoint = torch.load(path, 
                             map_location = device)
     net.load_state_dict(checkpoint['net'])
@@ -142,8 +147,8 @@ def result(net, loader, device, sup_ratio=1.0, type='ct'):
     print(f'idx1 : {idx1}, idx2 : {idx2}')
 
     # Path to save results
-    path = f'experiments/new_loss/{type}/{sup_ratio}/'
-    # path = f'experiments/new_loss/{type}/{sup_ratio}_sl/'
+    # path = f'experiments/new_loss/{type}/{sup_ratio}/'
+    path = f'experiments/new_loss/{type}/{sup_ratio}{ext}/'
     os.makedirs(path, exist_ok = True)
 
     # Calculation
@@ -165,7 +170,7 @@ def result(net, loader, device, sup_ratio=1.0, type='ct'):
         # x = torch.concat([ld, gt_hd, pred_hd], dim = 1)
         x = torch.concat([ld, gt_hd, pred_hd, torch.abs(gt_hd - pred_hd)], dim = 1)
         plot1(x, sup_ratio, file = f'{path}{c}.png')
-        if c == 20:
+        if c == 10:
             break
 
 
@@ -250,9 +255,9 @@ def plot1(x, sup_ratio, file = 'testing.png'):
                 ax[j, i].imshow(x[j, i, :, :], cmap = 'gray')
             else:
                 # print(x[j, i, :, :].min(),  np.percentile(x[j, i, :].numpy(), 99.2))
-                im = ax[j, i].imshow(x[j, i, :, :], cmap = 'jet')
-                        #  vmin = 0,
-                        #  vmax = 0.04)
+                im = ax[j, i].imshow(x[j, i, :, :], cmap = 'jet',
+                         vmin = 0,
+                         vmax = 0.02)
                         #  vmax = np.percentile(x[j, i, :].numpy(), 99.9))
             ax[j, i].axis('off')
             if j == 0:
@@ -288,4 +293,5 @@ if __name__ == '__main__':
     parser.add_argument('--crap_ratio', default=0.0, type=float)
     parser.add_argument('--noise', default=False, type=bool)
     parser.add_argument('--si_ld', type=bool, default=False)
+    parser.add_argument('--ext', type=str, default='')
     main(parser.parse_args())

@@ -64,7 +64,6 @@ class CT:
             ct_hd = cv2.imread(self.path + f'ct/{val}/{start}.png')[:, :, 0]
             pet_hd = cv2.imread(self.path + f'pet/{val}/{start}.png')[:, :, 0]
 
-        # print((ct_hd == ct_ld).all())
         ct_hd = self.t(ct_hd)
         ct_ld = self.t(ct_ld)
         pet_hd = self.t(pet_hd)
@@ -74,7 +73,6 @@ class CT:
         pet_ld_out = self.t(pet_ld_out)
         mask = mask[:, 2:-2, 2:-2]
         x = torch.concat([ct_hd, pet_hd, ct_ld, pet_ld, mask, ct_ld_out, pet_ld_out], dim = 0)
-        # x = torch.concat([ct_hd, ct_ld], dim = 0)
         if self.transform is not None:
             x = self.transform(x)
         

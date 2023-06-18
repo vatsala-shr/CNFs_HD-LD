@@ -1,9 +1,9 @@
 import numpy as np
 import torch.nn as nn
 import torch.nn.utils as utils
-from scipy.stats import gennorm
+# from scipy.stats import gennorm
 import torch
-import scipy.special as sp
+# import scipy.special as sp
 
 def bits_per_dim(x, nll):
     """Get the bits per dimension implied by using model with `loss`

@@ -70,7 +70,7 @@ def main(args):
     # path = f'ckpts/shape/{args.type}/{args.shape}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/out_dist/{args.crap_ratio}/{args.shape}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
-    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_sl_osc_best.pth.tar'
+    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_sl_best.pth.tar'
    
     start_epoch = 0
     global best_ssim
@@ -99,11 +99,12 @@ def main(args):
 
     epoch = start_epoch
     c = 0
+    history = []
     while epoch <= args.num_epochs:
         c += 1
         train(epoch, net, trainloader, device, optimizer, scheduler,
               loss_fn, ssim_loss, type = args.type, args = args)
-        if test(epoch, net, testloader, device, args, path):
+        if test(epoch, net, testloader, device, args, path, history):
             if os.path.exists(path):  
                 checkpoint = torch.load(path, map_location = device)
                 net.load_state_dict(checkpoint['net'])
@@ -135,18 +136,20 @@ def main(args):
 
         # Early Stopping
         print(f'Current Epoch - Best Epoch : {(epoch - best_epoch)}, Epochs Completed / Total Epochs : {c}/{args.num_epochs}')
-        if (epoch - best_epoch) >= 100:
-            print('Early Stopping...')
-            print(f"Best SSIM : {best_ssim}")
-            break
+        # if (epoch - best_epoch) >= 100:
+        #     print('Early Stopping...')
+        #     print(f"Best SSIM : {best_ssim}")
+        #     break
 
         if c == args.num_epochs:
             print('Sufficient Epoch Completed!')
             print(f'Best SSIM : {best_ssim}')
             break
+        # print(history)
 
-    # net.eval()
-    # evaluate_1c(net, testloader, device, args.type)
+        os.makedirs(f'history/{args.type}', exist_ok=True)
+        file = open(f'history/{args.type}/{args.sup_ratio}_sl.pkl', 'wb')
+        pickle.dump(history, file)
 
 @torch.enable_grad()
 def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, ssim_loss, max_grad_norm = -1, type = 'ct', args = None):
@@ -173,40 +176,22 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, ssim_l
             optimizer.zero_grad()
             z, sldj = net(x, cond_x, reverse=False)
             loss1 = loss_fn(z, sldj)
-            loss1.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            new_z = torch.randn(x.shape, dtype=torch.float32, device=device) * 0.0
+            new_z = torch.randn(x.shape, dtype=torch.float32, device=device) * 0.6
             rec_x, sldj = net(new_z, cond_x, reverse=True)
             rec_x = torch.sigmoid(rec_x)
+            rec_x = mask * rec_x
             # mse_loss = F.mse_loss(rec_x, x)
-            l1_loss = smooth_l1_loss(rec_x, x)
+            mse_loss = smooth_l1_loss(rec_x, x)
             ssim_loss = 1 - ssim1(rec_x, x, data_range = 1)
-
-            # if i == 0:
-            #     fig, ax = plt.subplots(1, 3, figsize = (30, 30))
-            #     ax[0].imshow(x[0, 0, :, :].detach().cpu(), cmap = 'gray')
-            #     ax[1].imshow(rec_x[0, 0, :, :].detach().cpu(), cmap = 'gray')
-            #     ax[2].imshow(cond_x[0, 0, :, :].detach().cpu(), cmap = 'gray')
-            #     ax[0].axis('off')
-            #     ax[1].axis('off')
-            #     ax[2].axis('off')
-            #     plt.show()
-            #     os.makedirs(f'{args.sup_ratio}', exist_ok = True)
-            #     plt.savefig(f'{args.sup_ratio}/{i}.png', bbox_inches = 'tight')
-            #     plt.close()
-
-            loss2 = l1_loss + ssim_loss
-            loss2.backward()
-            optimizer.step()
+            loss2 = mse_loss + ssim_loss
             loss = loss1 + loss2
             latent_loss_m.update(loss1.item(), x.size(0))
-            mse_loss_m.update(l1_loss.item(), x.size(0))
+            mse_loss_m.update(mse_loss.item(), x.size(0))
             ssim_loss_m.update(ssim_loss.item(), x.size(0))
-            # loss.backward()
+            loss.backward()
             if max_grad_norm > 0:
                 util.clip_grad_norm(optimizer, max_grad_norm)
-            # optimizer.step()
+            optimizer.step()
             scheduler.step(global_step)
 
             progress_bar.set_postfix(bpd=util.bits_per_dim(x, latent_loss_m.avg),
@@ -217,7 +202,7 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, ssim_l
 
 
 @torch.no_grad()
-def test(epoch, net, testloader, device, args, path):
+def test(epoch, net, testloader, device, args, path, history = []):
     global best_ssim
     global best_epoch
     net.eval()
@@ -225,6 +210,7 @@ def test(epoch, net, testloader, device, args, path):
     rrmse_val, psnr_val, ssim_val = evaluate_1c(net, testloader, device, args.type)
     ssim = np.mean(ssim_val)
     flag = True
+    history.append(ssim)
 
     # Save checkpoint
     if torch.isnan(torch.tensor(ssim)):
@@ -258,7 +244,7 @@ if __name__ == '__main__':
     parser.add_argument('--benchmark', type=str2bool, default=True, help='Turn on CUDNN benchmarking')
     parser.add_argument('--gpu_id', default=6, type=int, help='ID of GPUs to use')
     parser.add_argument('--lr', default=1e-3, type=float, help='Learning rate')
-    parser.add_argument('--max_grad _norm', type=float, default=-5., help='Max gradient norm for clipping')
+    parser.add_argument('--max_grad _norm', type=float, default=-1., help='Max gradient norm for clipping')
     parser.add_argument('--num_channels', '-C', default=128, type=int, help='Number of channels in hidden layers')
     parser.add_argument('--num_levels', '-L', default=4, type=int, help='Number of levels in the Glow model')
     parser.add_argument('--num_steps', '-K', default=8, type=int, help='Number of steps of flow in each level')

@@ -7,6 +7,7 @@ from models.glow.act_norm import ActNorm
 from models.glow.coupling import Coupling, CondCoupling
 from models.glow.inv_conv import InvConv
 
+import matplotlib.pyplot as plt
 import math
 
 class Glow(nn.Module):

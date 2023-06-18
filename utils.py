@@ -10,7 +10,7 @@ import pdb
 from pytorch_msssim import ssim as ssim1
 
 @torch.no_grad()
-def sample(net, origin_img, gray_img, device, sigma=0.2):
+def sample(net, origin_img, gray_img, device, sigma=0.6):
     B, C, W, H = origin_img.shape
     z = torch.zeros((B, C, W, H), device = device)
     # z = torch.randn((B, C, W, H), dtype=torch.float32, device=device) * sigma

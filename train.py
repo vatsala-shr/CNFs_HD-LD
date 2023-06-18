@@ -49,8 +49,8 @@ def main(args):
                           noise=args.noise,
                           noise_iter=args.noise_iter)
     test_set = CT(train = False)
-    trainloader = data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=args.num_workers)
-    testloader = data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=args.num_workers)
+    trainloader = data.DataLoader(train_set, batch_size=args.bs, shuffle=True, num_workers=args.num_workers)
+    testloader = data.DataLoader(test_set, batch_size=args.bs, shuffle=False, num_workers=args.num_workers)
 
     # Model
     print('Building model..')
@@ -99,11 +99,12 @@ def main(args):
 
     epoch = start_epoch
     c = 0
+    history = []
     while epoch <= args.num_epochs:
         c += 1
         train(epoch, net, trainloader, device, optimizer, scheduler,
               loss_fn, ssim_loss, type = args.type, args = args)
-        if test(epoch, net, testloader, device, args, path):
+        if test(epoch, net, testloader, device, args, path, history):
             if os.path.exists(path):  
                 checkpoint = torch.load(path, map_location = device)
                 net.load_state_dict(checkpoint['net'])
@@ -135,18 +136,19 @@ def main(args):
 
         # Early Stopping
         print(f'Current Epoch - Best Epoch : {(epoch - best_epoch)}, Epochs Completed / Total Epochs : {c}/{args.num_epochs}')
-        if (epoch - best_epoch) >= 100:
-            print('Early Stopping...')
-            print(f"Best SSIM : {best_ssim}")
-            break
+        # if (epoch - best_epoch) >= 100:
+        #     print('Early Stopping...')
+        #     print(f"Best SSIM : {best_ssim}")
+        #     break
 
         if c == args.num_epochs:
             print('Sufficient Epoch Completed!')
             print(f'Best SSIM : {best_ssim}')
             break
 
-    # net.eval()
-    # evaluate_1c(net, testloader, device, args.type)
+        os.makedirs(f'history/{args.type}', exist_ok=True)
+        file = open(f'history/{args.type}/{args.sup_ratio}.pkl', 'wb')
+        pickle.dump(history, file)
 
 @torch.enable_grad()
 def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, ssim_loss, max_grad_norm = -1, type = 'ct', args = None):
@@ -187,7 +189,7 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, ssim_l
 
 
 @torch.no_grad()
-def test(epoch, net, testloader, device, args, path):
+def test(epoch, net, testloader, device, args, path, history = []):
     global best_ssim
     global best_epoch
     net.eval()
@@ -195,6 +197,7 @@ def test(epoch, net, testloader, device, args, path):
     rrmse_val, psnr_val, ssim_val = evaluate_1c(net, testloader, device, args.type)
     ssim = np.mean(ssim_val)
     flag = True
+    history.append(ssim)
 
     # Save checkpoint
     if torch.isnan(torch.tensor(ssim)):
@@ -224,11 +227,11 @@ if __name__ == '__main__':
     def str2bool(s):
         return s.lower().startswith('t')
 
-    parser.add_argument('--batch_size', default=4, type=int, help='Batch size per GPU')
+    parser.add_argument('--bs', default=4, type=int, help='Batch size per GPU')
     parser.add_argument('--benchmark', type=str2bool, default=True, help='Turn on CUDNN benchmarking')
     parser.add_argument('--gpu_id', default=6, type=int, help='ID of GPUs to use')
     parser.add_argument('--lr', default=1e-3, type=float, help='Learning rate')
-    parser.add_argument('--max_grad _norm', type=float, default=-5., help='Max gradient norm for clipping')
+    parser.add_argument('--max_grad _norm', type=float, default=-1., help='Max gradient norm for clipping')
     parser.add_argument('--num_channels', '-C', default=128, type=int, help='Number of channels in hidden layers')
     parser.add_argument('--num_levels', '-L', default=4, type=int, help='Number of levels in the Glow model')
     parser.add_argument('--num_steps', '-K', default=8, type=int, help='Number of steps of flow in each level')
