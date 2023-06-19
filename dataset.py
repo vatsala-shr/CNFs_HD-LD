@@ -72,6 +72,7 @@ class CT:
         ct_ld_out = self.t(ct_ld_out)
         pet_ld_out = self.t(pet_ld_out)
         mask = mask[:, 2:-2, 2:-2]
+        # x = torch.concat([ct_hd, pet_hd, ct_ld, pet_ld], dim = 0)
         x = torch.concat([ct_hd, pet_hd, ct_ld, pet_ld, mask, ct_ld_out, pet_ld_out], dim = 0)
         if self.transform is not None:
             x = self.transform(x)
@@ -83,7 +84,7 @@ class CT:
 #                                     transforms.RandomVerticalFlip()])
     
 # train_set = CT(num_hd = int(1 * 200),
-#                transform=transform,
+#                transform=None,
 #                num_crap=0,
 #                noise = True,
 #                noise_iter = 0)
@@ -93,6 +94,15 @@ class CT:
 # for i in range(train_set.__len__()):
 #     x_prime = train_set.__getitem__(i).unsqueeze(1)
 #     print(x_prime.shape)
-#     image = torchvision.utils.make_grid(x_prime, nrow = 2, padding = 2, pad_value = 128)
-#     torchvision.utils.save_image(image, f'train_data/{i}.png')
-#     # sleep(0.2)
+#     # image = torchvision.utils.make_grid(x_prime, nrow = 2, padding = 2, pad_value = 128)
+#     # torchvision.utils.save_image(image, f'train_data/{i}.png')
+#     fig, ax = plt.subplots(1, 2, figsize = (30, 30))
+#     ax[0].imshow(x_prime[0, 0, :, :], cmap = 'gray')
+#     ax[1].imshow(x_prime[2, 0, :, :], cmap = 'gray')
+#     ax[0].axis('off')
+#     ax[1].axis('off')
+#     ax[0].set_title('High Dose (CT)', fontsize = 30)
+#     ax[1].set_title('Low Dose (CT)', fontsize = 30)
+#     fig.subplots_adjust(wspace = -0.05)
+#     plt.savefig(f'train_data/{i}_ct.png', bbox_inches = 'tight')
+#     break

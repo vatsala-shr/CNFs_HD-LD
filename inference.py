@@ -88,52 +88,52 @@ def main(args):
     # Visualizing the results
     # for i in sup_ratio:
     #     print(i)
-    # result(net, testloader, device, args.sup_ratio, args.type)
+    result(net, testloader, device, args.sup_ratio, args.type)
 
     # shape = [0.5, 0.75, 1.0, 1.5, 2.0]
     # noise_iter = [1, 2, 4, 8, 16]
     # for j in noise_iter:
     #     # Checking the metrics related to different experiments
-    #     rrmse_val = list()
-    #     psnr_val = list()
-    #     ssim_val = list()
-    shape = ['ll', 'll+sl', 'll_then_sl']
-    for i in shape:
-        print(i)
-        # Loading the correct weights
-        path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{i}.pth.tar'
-        checkpoint = torch.load(path, 
-                                map_location = device)
-        print('Building model..')
-        net = Glow(num_channels=args.num_channels,
-                num_levels=args.num_levels,
-                num_steps=args.num_steps,
-                mode=args.mode,
-                inp_channel=args.inp_channel,
-                cond_channel=args.cond_channel,
-                cc = args.cc)
-        net = net.to(device)
-        net.load_state_dict(checkpoint['net'])
-        rrmse = checkpoint['rrmse']
-        psnr = checkpoint['psnr']
-        ssim = checkpoint['ssim']
-        print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
-        print('Correct weights loaded!')
+    # rrmse_val = list()
+    # psnr_val = list()
+    # ssim_val = list()
+    # shape = ['ll', 'll+sl', 'll_then_sl']
+    # for i in shape:
+    #     print(i)
+    #     # Loading the correct weights
+    #     path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{i}.pth.tar'
+    #     checkpoint = torch.load(path, 
+    #                             map_location = device)
+    #     print('Building model..')
+    #     net = Glow(num_channels=args.num_channels,
+    #             num_levels=args.num_levels,
+    #             num_steps=args.num_steps,
+    #             mode=args.mode,
+    #             inp_channel=args.inp_channel,
+    #             cond_channel=args.cond_channel,
+    #             cc = args.cc)
+    #     net = net.to(device)
+    #     net.load_state_dict(checkpoint['net'])
+    #     rrmse = checkpoint['rrmse']
+    #     psnr = checkpoint['psnr']
+    #     ssim = checkpoint['ssim']
+    #     print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
+    #     print('Correct weights loaded!')
 
 
-        # Evaluate the model
-        net.eval()
-        rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type)
-        rrmse_val.append(rrmse)
-        psnr_val.append(psnr)
-        ssim_val.append(ssim)
+    #     # Evaluate the model
+    #     net.eval()
+    #     rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type)
+    #     rrmse_val.append(rrmse)
+    #     psnr_val.append(psnr)
+    #     ssim_val.append(ssim)
 
-    rrmse_val, psnr_val, ssim_val = np.array(rrmse_val), np.array(psnr_val), np.array(ssim_val)
-    p = f'experiments/metrics/{args.type}/{args.sup_ratio}/'
-    os.makedirs(p, exist_ok=True)
-    create_boxplot(shape, rrmse_val, f'RRMSE', p + 'rrmse')
-    create_boxplot(shape, psnr_val, f'PSNR', p + 'psnr')
-    create_boxplot(shape, ssim_val, f'SSIM', p + 'ssim')
+    # rrmse_val, psnr_val, ssim_val = np.array(rrmse_val), np.array(psnr_val), np.array(ssim_val)
+    # p = f'experiments/metrics/{args.type}/{args.sup_ratio}/'
+    # os.makedirs(p, exist_ok=True)
+    # create_boxplot(shape, rrmse_val, f'RRMSE ', p + 'rrmse')
+    # create_boxplot(shape, psnr_val, f'PSNR ', p + 'psnr')
+    # create_boxplot(shape, ssim_val, f'SSIM ', p + 'ssim')
 
 
 @torch.no_grad()
@@ -152,7 +152,7 @@ def result(net, loader, device, sup_ratio=1.0, type='ct'):
 
     # Path to save results
     # path = f'experiments/new_loss/{type}/{sup_ratio}/'
-    path = f'experiments/new_loss/{type}/{sup_ratio}_{ext}_ssim/'
+    path = f'experiments/new_loss/{type}/{sup_ratio}_{ext}/'
     os.makedirs(path, exist_ok = True)
 
     # Calculation
@@ -181,7 +181,7 @@ def result(net, loader, device, sup_ratio=1.0, type='ct'):
         s = 1 - loss.ssim_loss(gt_hd, pred_hd, window_size = 11, max_val = 1.0, reduction = None)
         # print(s.shape)
         # x = torch.concat([ld, gt_hd, pred_hd, torch.abs(gt_hd - pred_hd)],dim = 1)
-        x = torch.concat([ld, gt_hd, pred_hd, s],dim = 1)
+        x = torch.concat([ld, gt_hd, pred_hd],dim = 1)
         plot1(x, sup_ratio, file = f'{path}{c}.png')
         if c == 10:
             break
@@ -260,7 +260,7 @@ def plot1(x, sup_ratio, file = 'testing.png'):
     print(x.shape)
     imgs = x.shape[0]
     batch = x.shape[1]
-    labels = ['Low Dose', 'Ground Truth', 'Predicted', 'L1 Value']
+    labels = ['Low Dose', 'Ground Truth', 'Predicted', 'SSIM Value']
     fig, ax = plt.subplots(imgs, batch, figsize = (40, 30))
     fig.subplots_adjust(wspace = 0.01, hspace = -0.48)
     for i in range(batch):
@@ -269,7 +269,7 @@ def plot1(x, sup_ratio, file = 'testing.png'):
                 ax[j, i].imshow(x[j, i, :, :], cmap = 'gray')
             else:
                 # print(x[j, i, :, :].min(),  np.percentile(x[j, i, :].numpy(), 99.2))
-                im = ax[j, i].imshow(x[j, i, :, :], cmap = 'jet')
+                im = ax[j, i].imshow(x[j, i, :, :], cmap = 'jet', vmin = 0, vmax = 1)
                         #  vmin = 0,
                         #  vmax = 0.02)
                         #  vmax = np.percentile(x[j, i, :].numpy(), 99.9))
@@ -280,9 +280,9 @@ def plot1(x, sup_ratio, file = 'testing.png'):
     title = plt.title(f'Results for {int(sup_ratio * 100)}% Supervision',
               loc = 'center', x = -1, y = 1.96)
     title.set_fontsize(40) 
-    cbar = plt.colorbar(im, ax=ax, orientation = 'horizontal', 
-                 pad = 0.01, aspect = 100)
-    cbar.ax.tick_params(labelsize=30)
+    # cbar = plt.colorbar(im, ax=ax, orientation = 'horizontal', 
+    #              pad = 0.01, aspect = 100)
+    # cbar.ax.tick_params(labelsize=30)
     plt.savefig(file, bbox_inches = 'tight')
     plt.close()
 
