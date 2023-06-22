@@ -37,10 +37,10 @@ class CT:
             start = 500 + idx
 
         ct_hd = cv2.imread(self.path + f'ct/hd/{start}.png')[:, :, 0] 
-        ct_ld = cv2.imread(self.path + f'ct/ld/{start}.png')[:, :, 0]
+        ct_ld = cv2.imread(self.path + f'ct/ld_out/{start}.png')[:, :, 0]
         ct_ld_out = cv2.imread(self.path + f'ct/ld_out/{start}.png')[:, :, 0] 
         pet_hd = cv2.imread(self.path + f'pet/hd/{start}.png')[:, :, 0] 
-        pet_ld = cv2.imread(self.path + f'pet/ld/{start}.png')[:, :, 0]
+        pet_ld = cv2.imread(self.path + f'pet/ld_out/{start}.png')[:, :, 0]
         pet_ld_out = cv2.imread(self.path + f'pet/ld_out/{start}.png')[:, :, 0]
         mask = cv2.imread(self.path + f'ct/mask/{start}.png')[:, :, 0]
         

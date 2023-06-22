@@ -28,6 +28,8 @@ from skimage.metrics import structural_similarity as ssim
 import numpy as np
 import pickle
 import kornia.losses as loss
+from utils import perceptual_loss
+from models.glow.coupling import UNet1
 
 def main(args):
     # Set up main device and scale batch size
@@ -66,11 +68,16 @@ def main(args):
         net = torch.nn.DataParallel(net, args.gpu_ids)
         cudnn.benchmark = args.benchmark
 
+    unet = UNet1(inp_channels=1, op_channels=1)
+    unet = unet.to(device)
+    unet_weights = torch.load('ckpts/unet/best.pth', map_location = device)
+    unet.load_state_dict(unet_weights)
+
     # # Different paths for different experiments
     # path = f'ckpts/shape/{args.type}/{args.shape}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/out_dist/{args.crap_ratio}/{args.shape}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
-    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{args.ext}.pth.tar'
+    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{args.ext}_out.pth.tar'
    
     start_epoch = 0
     global best_ssim
@@ -102,7 +109,7 @@ def main(args):
     while epoch <= args.num_epochs:
         c += 1
         train(epoch, net, trainloader, device, optimizer, scheduler,
-              loss_fn, type = args.type, args = args)
+              loss_fn, type = args.type, args = args, model=unet)
         if test(epoch, net, testloader, device, args, path, history):
             if os.path.exists(path):  
                 checkpoint = torch.load(path, map_location = device)
@@ -151,13 +158,14 @@ def main(args):
         pickle.dump(history, file)
 
 @torch.enable_grad()
-def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_grad_norm = -1, type = 'ct', args = None):
+def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_grad_norm = -1, type = 'ct', args = None, model = None):
     global global_step
     print('\nEpoch: %d' % epoch)
     net.train()
     latent_loss_m = util.AverageMeter()
     ssim_loss_m = util.AverageMeter()
     l1_loss_m = util.AverageMeter()
+    perceptual_loss_m = util.AverageMeter()
     idx1, idx2 = get_idx(type)
     smooth_l1_loss = torch.nn.SmoothL1Loss().to(device)
 
@@ -180,9 +188,11 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
                 new_z = torch.randn(x.shape, dtype=torch.float32, device=device) * 0.6
                 rec_x, sldj = net(new_z, cond_x, reverse=True)
                 rec_x = mask * torch.sigmoid(rec_x)
-                l1_loss = smooth_l1_loss(rec_x, x)
-                ssim_loss = 1 - ssim1(rec_x, x, data_range = 1)
-                loss = latent_loss + l1_loss + ssim_loss
+                # l1_loss = smooth_l1_loss(rec_x, x)
+                # ssim_loss = 1 - ssim1(rec_x, x, data_range = 1)
+                # spatial_loss = l1_loss + ssim_loss
+                spatial_loss = perceptual_loss(rec_x, x, model, smooth_l1_loss)
+                loss = latent_loss + spatial_loss
                 loss.backward()
                 if max_grad_norm > 0:
                     util.clip_grad_norm(optimizer, max_grad_norm)
@@ -190,11 +200,13 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
                 scheduler.step(global_step)
 
                 latent_loss_m.update(latent_loss.item(), x.size(0))
-                l1_loss_m.update(l1_loss.item(), x.size(0))
-                ssim_loss_m.update(ssim_loss.item(), x.size(0))
+                # l1_loss_m.update(l1_loss.item(), x.size(0))
+                # ssim_loss_m.update(ssim_loss.item(), x.size(0))
+                perceptual_loss_m.update(spatial_loss.item(), x.size(0))
                 progress_bar.set_postfix(bpd=util.bits_per_dim(x, latent_loss_m.avg),
-                                        ssim=ssim_loss_m.avg,
-                                        l1=l1_loss_m.avg)
+                                         pl = perceptual_loss_m.avg)
+                                        # ssim=ssim_loss_m.avg,
+                                        # l1=l1_loss_m.avg)
                 progress_bar.update(x.size(0))
                 global_step += x.size(0)
 
@@ -211,9 +223,10 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
                 rec_x, sldj = net(new_z, cond_x, reverse=True)
                 rec_x = mask * torch.sigmoid(rec_x)
                 optimizer.zero_grad()
-                l1_loss = smooth_l1_loss(rec_x, x)
-                ssim_loss = 1 - ssim1(rec_x, x, data_range = 1)
-                spatial_loss = l1_loss + ssim_loss
+                # l1_loss = smooth_l1_loss(rec_x, x)
+                # ssim_loss = 1 - ssim1(rec_x, x, data_range = 1)
+                # spatial_loss = l1_loss + ssim_loss
+                spatial_loss = perceptual_loss(rec_x, x, model, smooth_l1_loss)
                 spatial_loss.backward()
                 if max_grad_norm > 0:
                     util.clip_grad_norm(optimizer, max_grad_norm)
@@ -221,11 +234,13 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
                 scheduler.step(global_step)
 
                 latent_loss_m.update(latent_loss.item(), x.size(0))
-                l1_loss_m.update(l1_loss.item(), x.size(0))
-                ssim_loss_m.update(ssim_loss.item(), x.size(0))
+                # l1_loss_m.update(l1_loss.item(), x.size(0))
+                # ssim_loss_m.update(ssim_loss.item(), x.size(0))
+                perceptual_loss_m.update(spatial_loss.item(), x.size(0))
                 progress_bar.set_postfix(bpd=util.bits_per_dim(x, latent_loss_m.avg),
-                                        ssim=ssim_loss_m.avg,
-                                        l1=l1_loss_m.avg)
+                                         pl=perceptual_loss_m.avg)
+                                        # ssim=ssim_loss_m.avg,
+                                        # l1=l1_loss_m.avg)
                 progress_bar.update(x.size(0))
                 global_step += x.size(0)
 

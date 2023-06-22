@@ -8,6 +8,9 @@ from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 import pdb
 from pytorch_msssim import ssim as ssim1
+import torchvision
+from models.glow.coupling import UNet1
+import pdb
 
 @torch.no_grad()
 def sample(net, origin_img, gray_img, device, sigma=0.6):
@@ -154,3 +157,9 @@ def get_idx(type):
         idx2 = 6
 
     return idx1, idx2
+
+def perceptual_loss(x, y, net, loss):
+    x = net(x)
+    y = net(y)
+    # return loss(x[1], y[1])
+    return F.mse_loss(x[1], y[1])

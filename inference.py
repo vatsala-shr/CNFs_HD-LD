@@ -60,7 +60,7 @@ def main(args):
     ext = args.ext
     # Loading the correct weights
     # path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_sl_best.pth.tar'
-    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{ext}.pth.tar'
+    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{ext}_out.pth.tar'
     print(path)
     # path = f'ckpts/resnet/{args.type}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
@@ -88,7 +88,7 @@ def main(args):
     # Visualizing the results
     # for i in sup_ratio:
     #     print(i)
-    result(net, testloader, device, args.sup_ratio, args.type)
+    # result(net, testloader, device, args.sup_ratio, args.type)
 
     # shape = [0.5, 0.75, 1.0, 1.5, 2.0]
     # noise_iter = [1, 2, 4, 8, 16]
@@ -278,7 +278,7 @@ def plot1(x, sup_ratio, file = 'testing.png'):
                 ax[j, i].set_title(labels[i], fontsize = 40)
 
     title = plt.title(f'Results for {int(sup_ratio * 100)}% Supervision',
-              loc = 'center', x = -1, y = 1.96)
+              loc = 'center', x = -0.5, y = 1.85)
     title.set_fontsize(40) 
     # cbar = plt.colorbar(im, ax=ax, orientation = 'horizontal', 
     #              pad = 0.01, aspect = 100)

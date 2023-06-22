@@ -122,7 +122,7 @@ class DualResidualBlock(nn.Module):
         return x + addn
 
 class UNet1(nn.Module):
-    def __init__(self, inp_channels = 2, op_channels = 1, features = [8, 16, 32, 64, 128]):
+    def __init__(self, inp_channels = 2, op_channels = 1, features = [32, 64, 128]):
         super(UNet1, self).__init__()
         
         # Encoder
@@ -148,18 +148,18 @@ class UNet1(nn.Module):
         enc2 = self.encoder2(self.pool(enc1))
         enc3 = self.encoder3(self.pool(enc2))
         
-        # Decoder
-        dec2 = self.upconv2(enc3)
-        dec2 = torch.cat((enc2, dec2), dim=1)
-        dec2 = self.decoder2(dec2)
-        dec1 = self.upconv1(dec2)
-        dec1 = torch.cat((enc1, dec1), dim=1)
-        dec1 = self.decoder1(dec1)
+        # # Decoder
+        # dec2 = self.upconv2(enc3)
+        # dec2 = torch.cat((enc2, dec2), dim=1)
+        # dec2 = self.decoder2(dec2)
+        # dec1 = self.upconv1(dec2)
+        # dec1 = torch.cat((enc1, dec1), dim=1)
+        # dec1 = self.decoder1(dec1)
         
-        # Output
-        output = self.output(dec1)
+        # # Output
+        # output = self.output(dec1)
         
-        return output
+        return enc3, enc3
 
 
 class UNet(nn.Module):
