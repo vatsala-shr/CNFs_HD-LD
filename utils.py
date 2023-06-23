@@ -107,7 +107,7 @@ def create_boxplot(labels, values, title, name):
 
     ax.set_yticklabels(labels)
     # ax.set_ylabel('% of Supervision')
-    ax.set_ylabel('Batch Size')
+    ax.set_ylabel('Loss Functions')
     # ax.set_ylabel('Conditional Input')
     # ax.set_ylabel('Separate Coupling Layer for Conditional Input')
     plt.title(title)
