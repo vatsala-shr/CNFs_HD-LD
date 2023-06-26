@@ -4,10 +4,10 @@ import torch
 import os
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
-# from skimage.metrics import structural_similarity as ssim
-# from skimage.metrics import peak_signal_noise_ratio as psnr
+from skimage.metrics import structural_similarity as ssim
+from skimage.metrics import peak_signal_noise_ratio as psnr
 import pdb
-# from pytorch_msssim import ssim as ssim1
+from pytorch_msssim import ssim as ssim1
 import torchvision
 from models.glow.coupling import UNet1
 import pdb

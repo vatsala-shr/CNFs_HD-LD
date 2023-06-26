@@ -191,11 +191,10 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
                 rec_x, sldj = net(new_z, cond_x, reverse=True)
                 rec_x = mask * torch.sigmoid(rec_x)
                 if sl_name == 'pl':
-                    sl = perceptual_loss
+                    spatial_loss = perceptual_loss(rec_x, x, model, smooth_l1_loss)
                 elif sl_name == 'l1':
-                    sl = smooth_l1_loss
+                    spatial_loss = smooth_l1_loss(rec_x, x)
 
-                spatial_loss = sl(rec_x, x, model, smooth_l1_loss)
                 loss = latent_loss + spatial_loss
                 loss.backward()
                 if max_grad_norm > 0:
@@ -224,7 +223,10 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
                 new_z = torch.randn(x.shape, dtype=torch.float32, device=device) * 0.6
                 rec_x, sldj = net(new_z, cond_x, reverse=True)
                 rec_x = mask * torch.sigmoid(rec_x)
-                spatial_loss = sl(rec_x, x, model, smooth_l1_loss)
+                if sl_name == 'pl':
+                    spatial_loss = perceptual_loss(rec_x, x, model, smooth_l1_loss)
+                elif sl_name == 'l1':
+                    spatial_loss = smooth_l1_loss(rec_x, x)
                 loss = latent_loss + spatial_loss
 
                 # Backpropagation
