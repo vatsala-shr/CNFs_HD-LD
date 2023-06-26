@@ -17,17 +17,17 @@ import torch.nn.functional as F
 from time import sleep
 from utils import evaluate_1c
 import pdb
-from pytorch_msssim import ssim as ssim1
+# from pytorch_msssim import ssim as ssim1
 
 from models import Glow
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from utils import count_parameters, sample, get_idx
 
-from skimage.metrics import structural_similarity as ssim
+# from skimage.metrics import structural_similarity as ssim
 import numpy as np
 import pickle
-import kornia.losses as loss
+# import kornia.losses as loss
 from utils import perceptual_loss
 from models.glow.coupling import UNet1
 
@@ -68,6 +68,8 @@ def main(args):
         net = torch.nn.DataParallel(net, args.gpu_ids)
         cudnn.benchmark = args.benchmark
 
+    
+
     unet = UNet1(inp_channels=1, op_channels=1)
     unet = unet.to(device)
     unet_weights = torch.load('ckpts/unet/best.pth', map_location = device)
@@ -77,7 +79,7 @@ def main(args):
     # path = f'ckpts/shape/{args.type}/{args.shape}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/out_dist/{args.crap_ratio}/{args.shape}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
-    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{args.ext}_out.pth.tar'
+    path = f'ckpts/adv/{args.type}/{args.sup_ratio}_{args.ext}_out.pth.tar'
    
     start_epoch = 0
     global best_ssim
@@ -158,14 +160,12 @@ def main(args):
         pickle.dump(history, file)
 
 @torch.enable_grad()
-def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_grad_norm = -1, type = 'ct', args = None, model = None):
+def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_grad_norm = -1, type = 'ct', args = None, model = None, epsilon = 5e-4):
     global global_step
     print('\nEpoch: %d' % epoch)
     net.train()
     latent_loss_m = util.AverageMeter()
-    ssim_loss_m = util.AverageMeter()
-    l1_loss_m = util.AverageMeter()
-    perceptual_loss_m = util.AverageMeter()
+    spatial_loss_m = util.AverageMeter()
     idx1, idx2 = get_idx(type)
     smooth_l1_loss = torch.nn.SmoothL1Loss().to(device)
 
@@ -180,18 +180,22 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
             if len(cond_x.shape) < 4:
                 cond_x = cond_x.unsqueeze(1)
             x, cond_x = x.to(device), cond_x.to(device)
+            cond_x.requires_grad = True
             z, sldj = net(x, cond_x, reverse=False)
 
-            if args.ext == 'll+sl':
+            if args.ext == 'll+sl_pl' or args.ext == 'll+sl_l1':
+                sl_name = args.ext.split('_')[1]
                 optimizer.zero_grad()
                 latent_loss = loss_fn(z, sldj)
                 new_z = torch.randn(x.shape, dtype=torch.float32, device=device) * 0.6
                 rec_x, sldj = net(new_z, cond_x, reverse=True)
                 rec_x = mask * torch.sigmoid(rec_x)
-                # l1_loss = smooth_l1_loss(rec_x, x)
-                # ssim_loss = 1 - ssim1(rec_x, x, data_range = 1)
-                # spatial_loss = l1_loss + ssim_loss
-                spatial_loss = perceptual_loss(rec_x, x, model, smooth_l1_loss)
+                if sl_name == 'pl':
+                    sl = perceptual_loss
+                elif sl_name == 'l1':
+                    sl = smooth_l1_loss
+
+                spatial_loss = sl(rec_x, x, model, smooth_l1_loss)
                 loss = latent_loss + spatial_loss
                 loss.backward()
                 if max_grad_norm > 0:
@@ -200,49 +204,77 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
                 scheduler.step(global_step)
 
                 latent_loss_m.update(latent_loss.item(), x.size(0))
-                # l1_loss_m.update(l1_loss.item(), x.size(0))
-                # ssim_loss_m.update(ssim_loss.item(), x.size(0))
-                perceptual_loss_m.update(spatial_loss.item(), x.size(0))
+                spatial_loss_m.update(spatial_loss.item(), x.size(0))
                 progress_bar.set_postfix(bpd=util.bits_per_dim(x, latent_loss_m.avg),
-                                         pl = perceptual_loss_m.avg)
-                                        # ssim=ssim_loss_m.avg,
-                                        # l1=l1_loss_m.avg)
+                                         pl = spatial_loss_m.avg)
                 progress_bar.update(x.size(0))
                 global_step += x.size(0)
 
-            elif args.ext == 'll_then_sl':
+                # Adversarial Examples Training
+
+                # Calculating FGSM
+                cond_x = cond_x + (epsilon * cond_x.grad)
+                cond_x = cond_x - cond_x.min() / cond_x.max() - cond_x.min()
+                cond_x[cond_x.isnan()] = 0
+
+                # Feeding to the network and calculating loss
+                z, sldj = net(x, cond_x, reverse=False)
                 optimizer.zero_grad()
                 latent_loss = loss_fn(z, sldj)
-                latent_loss.backward()
-                if max_grad_norm > 0:
-                    util.clip_grad_norm(optimizer, max_grad_norm)
-                optimizer.step()
-                scheduler.step(global_step)
-
                 new_z = torch.randn(x.shape, dtype=torch.float32, device=device) * 0.6
                 rec_x, sldj = net(new_z, cond_x, reverse=True)
                 rec_x = mask * torch.sigmoid(rec_x)
-                optimizer.zero_grad()
-                # l1_loss = smooth_l1_loss(rec_x, x)
-                # ssim_loss = 1 - ssim1(rec_x, x, data_range = 1)
-                # spatial_loss = l1_loss + ssim_loss
-                spatial_loss = perceptual_loss(rec_x, x, model, smooth_l1_loss)
-                spatial_loss.backward()
+                spatial_loss = sl(rec_x, x, model, smooth_l1_loss)
+                loss = latent_loss + spatial_loss
+
+                # Backpropagation
+                loss.backward()
                 if max_grad_norm > 0:
                     util.clip_grad_norm(optimizer, max_grad_norm)
                 optimizer.step()
                 scheduler.step(global_step)
 
+                # Updating the progress bar
                 latent_loss_m.update(latent_loss.item(), x.size(0))
-                # l1_loss_m.update(l1_loss.item(), x.size(0))
-                # ssim_loss_m.update(ssim_loss.item(), x.size(0))
-                perceptual_loss_m.update(spatial_loss.item(), x.size(0))
+                spatial_loss_m.update(spatial_loss.item(), x.size(0))
                 progress_bar.set_postfix(bpd=util.bits_per_dim(x, latent_loss_m.avg),
-                                         pl=perceptual_loss_m.avg)
-                                        # ssim=ssim_loss_m.avg,
-                                        # l1=l1_loss_m.avg)
+                                         pl = spatial_loss_m.avg)
                 progress_bar.update(x.size(0))
                 global_step += x.size(0)
+
+            # elif args.ext == 'll_then_sl':
+            #     optimizer.zero_grad()
+            #     latent_loss = loss_fn(z, sldj)
+            #     latent_loss.backward()
+            #     if max_grad_norm > 0:
+            #         util.clip_grad_norm(optimizer, max_grad_norm)
+            #     optimizer.step()
+            #     scheduler.step(global_step)
+
+            #     new_z = torch.randn(x.shape, dtype=torch.float32, device=device) * 0.6
+            #     rec_x, sldj = net(new_z, cond_x, reverse=True)
+            #     rec_x = mask * torch.sigmoid(rec_x)
+            #     optimizer.zero_grad()
+            #     # l1_loss = smooth_l1_loss(rec_x, x)
+            #     # ssim_loss = 1 - ssim1(rec_x, x, data_range = 1)
+            #     # spatial_loss = l1_loss + ssim_loss
+            #     spatial_loss = perceptual_loss(rec_x, x, model, smooth_l1_loss)
+            #     spatial_loss.backward()
+            #     if max_grad_norm > 0:
+            #         util.clip_grad_norm(optimizer, max_grad_norm)
+            #     optimizer.step()
+            #     scheduler.step(global_step)
+            #     print(f'll:{latent_loss}, sl:{spatial_loss}')
+            #     latent_loss_m.update(latent_loss.item(), x.size(0))
+            #     # l1_loss_m.update(l1_loss.item(), x.size(0))
+            #     # ssim_loss_m.update(ssim_loss.item(), x.size(0))
+            #     perceptual_loss_m.update(spatial_loss.item(), x.size(0))
+            #     progress_bar.set_postfix(bpd=util.bits_per_dim(x, latent_loss_m.avg),
+            #                              pl=perceptual_loss_m.avg)
+            #                             # ssim=ssim_loss_m.avg,
+            #                             # l1=l1_loss_m.avg)
+            #     progress_bar.update(x.size(0))
+            #     global_step += x.size(0)
 
             elif args.ext == 'll':
                 optimizer.zero_grad()
@@ -259,6 +291,28 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
                                         lr=optimizer.param_groups[0]['lr'])
                 progress_bar.update(x.size(0))
                 global_step += x.size(0)
+
+                # Adversarial Examples Training
+                cond_x = cond_x + (epsilon * cond_x.grad)
+                cond_x = cond_x - cond_x.min() / cond_x.max() - cond_x.min()
+                cond_x[cond_x.isnan()] = 0
+                z, sldj = net(x, cond_x, reverse=False)
+                optimizer.zero_grad()
+                latent_loss = loss_fn(z, sldj)
+                latent_loss.backward()
+                if max_grad_norm > 0:
+                    util.clip_grad_norm(optimizer, max_grad_norm)
+                optimizer.step()
+                scheduler.step(global_step)
+                
+        
+                latent_loss_m.update(latent_loss.item(), x.size(0))
+                progress_bar.set_postfix(nll=latent_loss_m.avg,
+                                        bpd=util.bits_per_dim(x, latent_loss_m.avg),
+                                        lr=optimizer.param_groups[0]['lr'])
+                progress_bar.update(x.size(0))
+                global_step += x.size(0)
+
 
 
 @torch.no_grad()
@@ -308,7 +362,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_channels', '-C', default=128, type=int, help='Number of channels in hidden layers')
     parser.add_argument('--num_levels', '-L', default=4, type=int, help='Number of levels in the Glow model')
     parser.add_argument('--num_steps', '-K', default=8, type=int, help='Number of steps of flow in each level')
-    parser.add_argument('--num_epochs', default=200, type=int, help='Number of epochs to train')
+    parser.add_argument('--num_epochs', default=300, type=int, help='Number of epochs to train')
     parser.add_argument('--num_samples', default=64, type=int, help='Number of samples at test time')
     parser.add_argument('--num_workers', default=8, type=int, help='Number of data loader threads')
     parser.add_argument('--resume', type=str2bool, default=True, help='Resume from checkpoint')

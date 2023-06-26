@@ -88,53 +88,53 @@ def main(args):
     # Visualizing the results
     # for i in sup_ratio:
     #     print(i)
-    # result(net, testloader, device, args.sup_ratio, args.type)
+    result(net, testloader, device, args.sup_ratio, args.type)
 
     # shape = [0.5, 0.75, 1.0, 1.5, 2.0]
     # noise_iter = [1, 2, 4, 8, 16]
     # for j in noise_iter:
     #     # Checking the metrics related to different experiments
 
-    rrmse_val = list()
-    psnr_val = list()
-    ssim_val = list()
-    shape = ['ll', 'll_then_sl']
-    for i in shape:
-        print(i)
-        # Loading the correct weights
-        path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{i}_out.pth.tar'
-        checkpoint = torch.load(path, 
-                                map_location = device)
-        print('Building model..')
-        net = Glow(num_channels=args.num_channels,
-                num_levels=args.num_levels,
-                num_steps=args.num_steps,
-                mode=args.mode,
-                inp_channel=args.inp_channel,
-                cond_channel=args.cond_channel,
-                cc = args.cc)
-        net = net.to(device)
-        net.load_state_dict(checkpoint['net'])
-        rrmse = checkpoint['rrmse']
-        psnr = checkpoint['psnr']
-        ssim = checkpoint['ssim']
-        print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
-        print('Correct weights loaded!')
+    # rrmse_val = list()
+    # psnr_val = list()
+    # ssim_val = list()
+    # shape = ['ll', 'll_then_sl']
+    # for i in shape:
+    #     print(i)
+    #     # Loading the correct weights
+    #     path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{i}_out.pth.tar'
+    #     checkpoint = torch.load(path, 
+    #                             map_location = device)
+    #     print('Building model..')
+    #     net = Glow(num_channels=args.num_channels,
+    #             num_levels=args.num_levels,
+    #             num_steps=args.num_steps,
+    #             mode=args.mode,
+    #             inp_channel=args.inp_channel,
+    #             cond_channel=args.cond_channel,
+    #             cc = args.cc)
+    #     net = net.to(device)
+    #     net.load_state_dict(checkpoint['net'])
+    #     rrmse = checkpoint['rrmse']
+    #     psnr = checkpoint['psnr']
+    #     ssim = checkpoint['ssim']
+    #     print(f'RRMSE: {rrmse}, PSNR: {psnr}, SSIM: {ssim}')
+    #     print('Correct weights loaded!')
 
 
-        # Evaluate the model
-        net.eval()
-        rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type)
-        rrmse_val.append(rrmse)
-        psnr_val.append(psnr)
-        ssim_val.append(ssim)
+    #     # Evaluate the model
+    #     net.eval()
+    #     rrmse, psnr, ssim = evaluate_1c(net, testloader, device, args.type)
+    #     rrmse_val.append(rrmse)
+    #     psnr_val.append(psnr)
+    #     ssim_val.append(ssim)
 
-    rrmse_val, psnr_val, ssim_val = np.array(rrmse_val), np.array(psnr_val), np.array(ssim_val)
-    p = f'experiments/pl/{args.type}/{args.sup_ratio}/'
-    os.makedirs(p, exist_ok=True)
-    create_boxplot(shape, rrmse_val, f'RRMSE ', p + 'rrmse')
-    create_boxplot(shape, psnr_val, f'PSNR ', p + 'psnr')
-    create_boxplot(shape, ssim_val, f'SSIM ', p + 'ssim')
+    # rrmse_val, psnr_val, ssim_val = np.array(rrmse_val), np.array(psnr_val), np.array(ssim_val)
+    # p = f'experiments/pl/{args.type}/{args.sup_ratio}/'
+    # os.makedirs(p, exist_ok=True)
+    # create_boxplot(shape, rrmse_val, f'RRMSE ', p + 'rrmse')
+    # create_boxplot(shape, psnr_val, f'PSNR ', p + 'psnr')
+    # create_boxplot(shape, ssim_val, f'SSIM ', p + 'ssim')
 
 
 @torch.no_grad()
@@ -279,7 +279,7 @@ def plot1(x, sup_ratio, file = 'testing.png'):
                 ax[j, i].set_title(labels[i], fontsize = 40)
 
     title = plt.title(f'Results for {int(sup_ratio * 100)}% Supervision',
-              loc = 'center', x = -0.5, y = 1.85)
+              loc = 'center', x = -0.8, y = 2)
     title.set_fontsize(40) 
     cbar = plt.colorbar(im, ax=ax, orientation = 'horizontal', 
                  pad = 0.01, aspect = 100)
