@@ -160,7 +160,7 @@ def main(args):
         pickle.dump(history, file)
 
 @torch.enable_grad()
-def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_grad_norm = -1, type = 'ct', args = None, model = None, epsilon = 5e-4):
+def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_grad_norm = -1, type = 'ct', args = None, model = None, epsilon = 1e-1):
     global global_step
     print('\nEpoch: %d' % epoch)
     net.train()
@@ -212,9 +212,8 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
                 # Adversarial Examples Training
 
                 # Calculating FGSM
-                cond_x = cond_x + (epsilon * cond_x.grad)
-                cond_x = cond_x - cond_x.min() / cond_x.max() - cond_x.min()
-                cond_x[cond_x.isnan()] = 0
+                cond_x = cond_x + (epsilon * torch.sign(cond_x.grad))
+                cond_x = torch.clamp(cond_x, 0, 1)
 
                 # Feeding to the network and calculating loss
                 z, sldj = net(x, cond_x, reverse=False)
@@ -295,9 +294,18 @@ def train(epoch, net, trainloader, device, optimizer, scheduler, loss_fn, max_gr
                 global_step += x.size(0)
 
                 # Adversarial Examples Training
-                cond_x = cond_x + (epsilon * cond_x.grad)
-                cond_x = cond_x - cond_x.min() / cond_x.max() - cond_x.min()
-                cond_x[cond_x.isnan()] = 0
+                # fig, ax = plt.subplots(1, 3, figsize=(30, 30))
+                # ax[0].imshow(cond_x[0,0,:,:].detach().cpu(), cmap='gray')
+                # im = ax[1].imshow((epsilon * cond_x.grad)[0,0,:,:].detach().cpu(), cmap='gray')
+                cond_x = cond_x + (epsilon * torch.sign(cond_x.grad))
+                # ax[2].imshow(cond_x[0,0,:,:].detach().cpu(), cmap='gray')
+                # ax[0].axis('off')
+                # ax[1].axis('off')
+                # ax[2].axis('off')
+                # cbar = plt.colorbar(im, ax=ax, orientation = 'horizontal', 
+                #  pad = 0.01, aspect = 100)
+                # plt.savefig(f'test.png', bbox_inches='tight')
+                cond_x = torch.clamp(cond_x, 0, 1)
                 z, sldj = net(x, cond_x, reverse=False)
                 optimizer.zero_grad()
                 latent_loss = loss_fn(z, sldj)
