@@ -68,8 +68,6 @@ def main(args):
         net = torch.nn.DataParallel(net, args.gpu_ids)
         cudnn.benchmark = args.benchmark
 
-    
-
     unet = UNet1(inp_channels=1, op_channels=1)
     unet = unet.to(device)
     unet_weights = torch.load('ckpts/unet/best.pth', map_location = device)
@@ -79,7 +77,7 @@ def main(args):
     # path = f'ckpts/shape/{args.type}/{args.shape}/{args.sup_ratio}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/out_dist/{args.crap_ratio}/{args.shape}_best.pth.tar'
     # path = f'ckpts/robust/{args.type}/noise/{args.crap_ratio}/{args.noise_iter}/{args.shape}_best.pth.tar'
-    path = f'ckpts/adv/{args.type}/{args.sup_ratio}_{args.ext}_out.pth.tar'
+    path = f'ckpts/new_loss/{args.type}/{args.sup_ratio}_{args.ext}_out.pth.tar'
    
     start_epoch = 0
     global best_ssim
@@ -104,6 +102,7 @@ def main(args):
     optimizer = optim.Adam(net.parameters(), lr=args.lr)
     scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
     print(f'Number of parameters : {count_parameters(net)}')
+    path = f'ckpts/adv/{args.type}/{args.sup_ratio}_{args.ext}_out_{args.eps}.pth.tar'
 
     epoch = start_epoch
     c = 0
@@ -372,7 +371,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_channels', '-C', default=128, type=int, help='Number of channels in hidden layers')
     parser.add_argument('--num_levels', '-L', default=4, type=int, help='Number of levels in the Glow model')
     parser.add_argument('--num_steps', '-K', default=8, type=int, help='Number of steps of flow in each level')
-    parser.add_argument('--num_epochs', default=300, type=int, help='Number of epochs to train')
+    parser.add_argument('--num_epochs', default=500, type=int, help='Number of epochs to train')
     parser.add_argument('--num_samples', default=64, type=int, help='Number of samples at test time')
     parser.add_argument('--num_workers', default=8, type=int, help='Number of data loader threads')
     parser.add_argument('--resume', type=str2bool, default=True, help='Resume from checkpoint')
@@ -390,6 +389,7 @@ if __name__ == '__main__':
     parser.add_argument('--noise_iter', default=1, type=int)
     parser.add_argument('--noise', default = False, type=bool)
     parser.add_argument('--ext', default = 'll', type=str)
+    parser.add_argument('--eps', type=float, default=1e-1)
     best_loss = float('inf')
     best_ssim = 0
     best_epoch = 0
