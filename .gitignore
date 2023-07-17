@@ -2,4 +2,5 @@ ckpts/
 data/
 experiments/
 *.png
+*.pyc
 history/
