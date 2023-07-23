@@ -2,5 +2,6 @@ ckpts/
 data/
 experiments/
 *.png
-*.pyc
+**/*.pyc
 history/
+*Copy*
