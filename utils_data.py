@@ -139,17 +139,18 @@ def load_data(args):
     ld_train = ld[:train_size]
     hd_test = hd[500:]
     ld_test = ld[500:]
-        
+    
+    valid_idx = random.sample(range(hd_test.shape[0]),40)
     if args.semi_sup and args.supervision<1.0 and args.secondary_noisy:
         noisy_target = get_noisy_target(args, train_size)
         noisy_train = noisy_target[:train_size]
         noisy_test = noisy_target[500:]
-        noisy_valid = noisy_target[valid_idx]
+        noisy_valid = noisy_test[valid_idx]
     else:
         noisy_train = noisy_test = noisy_valid = None
     
     print(ld_train.shape,ld_test.shape)
-    valid_idx = random.sample(range(hd_test.shape[0]),40)
+    
     train_data = DataClass(ld_train,hd_train,args.mode, args.semi_sup, args.supervision, noisy_train, train=True)
     test_data = DataClass(ld_test,hd_test,args.mode,args.semi_sup, args.supervision, noisy_test, train=False)
     valid_data = DataClass(ld_test[valid_idx],hd_test[valid_idx],args.mode, args.semi_sup, args.supervision, noisy_valid, train=False)

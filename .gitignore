@@ -2,6 +2,7 @@ ckpts/
 data/
 experiments/
 *.png
-**/*.pyc
+./**/*.pyc
 history/
 *Copy*
+.ipynb_checkpoints/
