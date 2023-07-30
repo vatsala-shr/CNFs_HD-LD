@@ -23,7 +23,10 @@ def set_new_range(num):
     new_range=num
     
 def get_trunc_vals(mode):
-    if new_range==0:
+    if mode=='petgc':
+        trunc_min = 0
+        trunc_max = 1
+    elif new_range==0:
         if mode=='ct':
             trunc_min = -1024
             trunc_max = 320 #760
@@ -47,7 +50,10 @@ def get_trunc_vals(mode):
     return (trunc_min,trunc_max)
 
 def get_standard_range(mode):
-    if new_range==0:
+    if mode=='petgc':
+        min_val = 0
+        max_val = 1
+    elif new_range==0:
         if mode=='ct':
             min_val = -1024
             max_val = 3072
@@ -122,34 +128,42 @@ def load_data(args):
         ld_pt, hd_pt = read_files(file_name[0], args.noise_level[0], data_path)
         ld_ct, hd_ct = read_files(file_name[1], args.noise_level[1], data_path)
         hd = np.stack((hd_pt,hd_ct),axis=1)
-        ld = np.stack((ld_pt,ld_ct),axis=1)
+        ld = np.stack((ld_pt,ld_ct),axis=1)    
+    elif args.mode == 'petgc':
+        data_path = '/home1/vatsala/LDPET_data/'
+        file_name = 'pet'
+        ld, hd = read_files(file_name, args.noise_level[0], data_path)
+        ld = np.expand_dims(ld, 1)
+        hd = np.expand_dims(hd, 1)
         
-    hd = hd*65535
-    ld = ld*65535
-    hd[hd>65535]=65535
-    ld[ld>65535]=65535
-    hd=hd.astype('uint16').astype('float32')
-    ld=ld.astype('uint16').astype('float32')
-    hd=hd/65535
-    ld=ld/65535
+    hd = np.clip(hd, 0, 1)
+    ld = np.clip(ld, 0, 1)
+    if args.mode == 'petgc':
+        hd = hd*65535
+        ld = ld*65535
+        hd=hd.astype('uint16').astype('float32')
+        ld=ld.astype('uint16').astype('float32')
+        hd=hd/65535
+        ld=ld/65535
     
     train_size = args.train_size if args.semi_sup else int(args.supervision*args.train_size) #smaller train size when fully supervised 
+    test_start = 500 if args.mode!='petgc' else 800
     
     hd_train = hd[:train_size]
     ld_train = ld[:train_size]
-    hd_test = hd[500:]
-    ld_test = ld[500:]
+    hd_test = hd[test_start:]
+    ld_test = ld[test_start:]
+    
+    print(ld_train.shape,ld_test.shape)
     
     valid_idx = random.sample(range(hd_test.shape[0]),40)
     if args.semi_sup and args.supervision<1.0 and args.secondary_noisy:
         noisy_target = get_noisy_target(args, train_size)
         noisy_train = noisy_target[:train_size]
-        noisy_test = noisy_target[500:]
+        noisy_test = noisy_target[test_start:]
         noisy_valid = noisy_test[valid_idx]
     else:
         noisy_train = noisy_test = noisy_valid = None
-    
-    print(ld_train.shape,ld_test.shape)
     
     train_data = DataClass(ld_train,hd_train,args.mode, args.semi_sup, args.supervision, noisy_train, train=True)
     test_data = DataClass(ld_test,hd_test,args.mode,args.semi_sup, args.supervision, noisy_test, train=False)
@@ -189,11 +203,7 @@ def get_noisy_target(args,train_size):
         targ = nib.load(os.path.join(data_path,'data_ld',file_name+'_'+str(args.noise_level[0])+'_1.nii.gz')).get_fdata().astype('float32')
         targ = np.expand_dims(targ,1)
         
-    targ = targ*65535
-    targ[targ>65535]=65535
-    targ=targ.astype('uint16').astype('float32')
-    targ=targ/65535
-        
+    targ = np.clip(targ, 0, 1)  
     return targ
 
     
@@ -281,29 +291,35 @@ def compute_rmse(tensor1, tensor2):
     return np.linalg.norm(tensor1-tensor2)/np.linalg.norm(tensor2)
 
 def compute_ssim(tensor1, tensor2, data_range, mask):
-    _, smap = ssim(tensor1,tensor2,data_range=data_range,gaussian_weights=True,sigma=4, full=True)
-    smap_masked = np.multiply(np.pad(smap, 2, 'constant'),mask)
-    return np.sum(smap_masked)/np.sum(mask)
+    mssim, smap = ssim(tensor1,tensor2,data_range=data_range,gaussian_weights=True,sigma=4, full=True)
+    if mask is None:
+        return mssim
+    else:
+        smap_masked = np.multiply(np.pad(smap, 2, 'constant'),mask)
+        return np.sum(smap_masked)/np.sum(mask)
 
 def compute_errors(tensor1, tensor2, mask, limits, mode, tight=False):
     if torch.is_tensor(tensor1):
         tensor1 = tensor1.detach().numpy()
         tensor2 = tensor2.detach().numpy()
         
-    tensor1 = tensor1.reshape(tensor1.shape[-2:])
-    tensor2 = tensor2.reshape(tensor2.shape[-2:])
+    pred = tensor1.reshape(tensor1.shape[-2:])
+    orig = tensor2.reshape(tensor2.shape[-2:])
     
-    pred = get_masked_img(tensor1,mask)
-    orig = get_masked_img(tensor2,mask)
-    
-    if tight==False:
-        pred_img = get_square_img(np.pad(pred, 2, 'constant')[limits[0]:limits[1],limits[2]:limits[3]])
+    if mask is None:
+        pred_img = pred
     else:
-        pred_img = np.pad(pred, 2, 'constant')[limits[0]:limits[1],limits[2]:limits[3]]
-        
-    pred_img = unnormalize_trunc(pred_img,mode, trunc=True)
-    pred = unnormalize_trunc(pred,mode, False)
-    orig = unnormalize_trunc(orig,mode, False)
+        pred = get_masked_img(pred,mask)
+        orig = get_masked_img(orig,mask)
+    
+        if tight==False:
+            pred_img = get_square_img(np.pad(pred, 2, 'constant')[limits[0]:limits[1],limits[2]:limits[3]])
+        else:
+            pred_img = np.pad(pred, 2, 'constant')[limits[0]:limits[1],limits[2]:limits[3]]
+    
+        pred_img = unnormalize_trunc(pred_img,mode, trunc=True)
+        pred = unnormalize_trunc(pred,mode, False)
+        orig = unnormalize_trunc(orig,mode, False)
 
     min_val,max_val = get_standard_range(mode)
     data_range = max_val-min_val
@@ -361,52 +377,75 @@ def create_save_path(args):
 
 def test_model(args,model,test_dataloader):
     with torch.no_grad():
-        contours = pickle.load(open('../../Pet_CT/data_masked/contours.pkl','rb'))
-        model.eval()
-        errors = []
-        i=0
-        preds = []
-        with tqdm(total=326) as pbar:
-            for data in test_dataloader:
-                x = data[0]
-                cond_x = data[1]
-                ref = data[2]
-                mask = contours[i][1]
-                limits = contours[i][0]
-                
-#                 show(x)
-#                 show(cond_x)
-#                 input()
-
-                if torch.cuda.is_available():
-                    x = x.to(args.device)
-                    cond_x = cond_x.to(args.device)
+        if args.mode == 'petgc':
+            model.eval()
+            errors = []
+            i=0
+            preds = []
+            
+            with tqdm(total=len(test_dataloader)) as pbar:
+                for data in test_dataloader:
+                    x = data[0]
+                    cond_x = data[1]
+                    ref = data[2]
                     
-                pred = sample(model, x, cond_x, args.device).cpu()
-                x = x.cpu()
-                
-                if args.mode == 'pet' or args.mode == 'ct':
-                    pred_img,rmse_img,ssim_img, qilv_img = compute_errors(pred,ref,mask,limits,args.mode)
+                    if torch.cuda.is_available():
+                        x = x.to(args.device)
+                        cond_x = cond_x.to(args.device)
+
+                    pred = sample(model, x, cond_x, args.device).cpu()
+                    x = x.cpu()
+
+                    pred_img,rmse_img,ssim_img, qilv_img = compute_errors(pred,ref,None,None,args.mode)
                     errors.append((rmse_img,ssim_img,qilv_img))
 
                     err_vals=(rmse_img,ssim_img,qilv_img)
                     if args.save:
                         save_fig(pred_img,err_vals,data[3].item(),args.save_path_fig,args.mode)
-                else:
-                    if save_nii:
-                        preds.append(pred.detach().cpu().numpy())
-                    pred_pet,rmse_pet,ssim_pet, qilv_pet = compute_errors(pred[:,0],ref[:,0],mask,limits,'pet')
-                    err_vals=(rmse_pet,ssim_pet, qilv_pet)
-                    if args.save:
-                        save_fig(pred_pet,err_vals,data[3].item(),args.save_path_fig,'pet') 
 
-                    pred_ct,rmse_ct,ssim_ct, qilv_ct = compute_errors(pred[:,1],ref[:,1],mask,limits,'ct')
-                    err_vals=(rmse_ct,ssim_ct, qilv_ct)
-                    if args.save:
-                        save_fig(pred_ct,err_vals,data[3].item(),args.save_path_fig,'ct') 
+        else: 
+            contours = pickle.load(open('../../Pet_CT/data_masked/contours.pkl','rb'))
+            model.eval()
+            errors = []
+            i=0
+            preds = []
+            with tqdm(total=326) as pbar:
+                for data in test_dataloader:
+                    x = data[0]
+                    cond_x = data[1]
+                    ref = data[2]
+                    mask = contours[i][1]
+                    limits = contours[i][0]
 
-                    errors.append((rmse_pet,ssim_pet, qilv_pet,rmse_ct,ssim_ct, qilv_ct))
+                    if torch.cuda.is_available():
+                        x = x.to(args.device)
+                        cond_x = cond_x.to(args.device)
 
-                pbar.update(1)
-                i=i+1
+                    pred = sample(model, x, cond_x, args.device).cpu()
+                    x = x.cpu()
+
+                    if args.mode == 'pet' or args.mode == 'ct':
+                        pred_img,rmse_img,ssim_img, qilv_img = compute_errors(pred,ref,mask,limits,args.mode)
+                        errors.append((rmse_img,ssim_img,qilv_img))
+
+                        err_vals=(rmse_img,ssim_img,qilv_img)
+                        if args.save:
+                            save_fig(pred_img,err_vals,data[3].item(),args.save_path_fig,args.mode)
+                    else:
+                        if save_nii:
+                            preds.append(pred.detach().cpu().numpy())
+                        pred_pet,rmse_pet,ssim_pet, qilv_pet = compute_errors(pred[:,0],ref[:,0],mask,limits,'pet')
+                        err_vals=(rmse_pet,ssim_pet, qilv_pet)
+                        if args.save:
+                            save_fig(pred_pet,err_vals,data[3].item(),args.save_path_fig,'pet') 
+
+                        pred_ct,rmse_ct,ssim_ct, qilv_ct = compute_errors(pred[:,1],ref[:,1],mask,limits,'ct')
+                        err_vals=(rmse_ct,ssim_ct, qilv_ct)
+                        if args.save:
+                            save_fig(pred_ct,err_vals,data[3].item(),args.save_path_fig,'ct') 
+
+                        errors.append((rmse_pet,ssim_pet, qilv_pet,rmse_ct,ssim_ct, qilv_ct))
+
+                    pbar.update(1)
+                    i=i+1
     return errors
